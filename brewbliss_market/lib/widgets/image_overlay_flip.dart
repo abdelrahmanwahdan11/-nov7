@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../core/theme/design_tokens.dart';
-import '../data/models/item.dart';
 import '../core/utils/app_localizations.dart';
+import '../data/models/item.dart';
+import 'price_badge.dart';
+import 'three_d_viewer.dart';
 
 class ImageOverlayFlip extends StatefulWidget {
   const ImageOverlayFlip({
@@ -62,7 +64,7 @@ class _ImageOverlayFlipState extends State<ImageOverlayFlip> {
                 },
                 child: _showBack
                     ? _BackFace(item: widget.item, loc: loc)
-                    : _FrontFace(item: widget.item),
+                    : _FrontFace(item: widget.item, loc: loc),
               ),
             ),
           ),
@@ -81,9 +83,11 @@ class _ImageOverlayFlipState extends State<ImageOverlayFlip> {
 }
 
 class _FrontFace extends StatelessWidget {
-  const _FrontFace({required this.item}) : super(key: const ValueKey('front'));
+  const _FrontFace({required this.item, required this.loc})
+      : super(key: const ValueKey('front'));
 
   final Item item;
+  final AppLocalizations loc;
 
   @override
   Widget build(BuildContext context) {
@@ -101,16 +105,27 @@ class _FrontFace extends StatelessWidget {
             borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
             child: AspectRatio(
               aspectRatio: 1,
-              child: Image.network(
-                item.images.first,
-                fit: BoxFit.cover,
-              ),
+              child: item.model3d != null
+                  ? ThreeDViewer(modelUrl: item.model3d!)
+                  : Image.network(
+                      item.images.first,
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
           const SizedBox(height: 16),
           Text(
             item.name,
             style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.center,
+            child: PriceBadge(
+              label: item.price != null
+                  ? '\\$${item.price!.toStringAsFixed(2)}'
+                  : loc.translate('offersBadge'),
+            ),
           ),
         ],
       ),

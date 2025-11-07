@@ -27,7 +27,6 @@ Future<void> main() async {
   final appController = await AppController.init();
   final itemsController = await ItemsController.init();
   final authController = AuthController();
-  appController.attachItemsController(itemsController);
   runApp(BrewBlissApp(
     appController: appController,
     authController: authController,

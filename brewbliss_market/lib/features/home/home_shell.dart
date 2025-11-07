@@ -34,6 +34,8 @@ class _HomeShellState extends State<HomeShell> {
   late final GlobalKey _compareKey;
   late final GlobalKey _fabKey;
   TutorialCoachMark? _coachMark;
+  VoidCallback? _coachListener;
+  bool _coachScheduled = false;
 
   @override
   void initState() {
