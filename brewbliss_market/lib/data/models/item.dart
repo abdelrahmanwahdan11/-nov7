@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'variant.dart';
+
 class Item {
   const Item({
     required this.id,
@@ -19,6 +21,8 @@ class Item {
     this.ratingAvg = 0,
     this.ratingCount = 0,
     this.priceHistory = const <double>[],
+    this.variants,
+    this.variantSelectedId,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -43,6 +47,11 @@ class Item {
               ?.map((value) => (value as num).toDouble())
               .toList() ??
           const <double>[],
+      variants: (json['variants'] as List<dynamic>?)
+          ?.map((variant) => Variant.fromJson(
+              (variant as Map<dynamic, dynamic>).cast<String, dynamic>()))
+          .toList(),
+      variantSelectedId: json['variantSelectedId'] as String?,
     );
   }
 
@@ -63,6 +72,8 @@ class Item {
   final double ratingAvg;
   final int ratingCount;
   final List<double> priceHistory;
+  final List<Variant>? variants;
+  final String? variantSelectedId;
 
   Map<String, dynamic> toJson() {
     return {
@@ -83,6 +94,8 @@ class Item {
       'ratingAvg': ratingAvg,
       'ratingCount': ratingCount,
       'priceHistory': priceHistory,
+      'variants': variants?.map((variant) => variant.toJson()).toList(),
+      'variantSelectedId': variantSelectedId,
     };
   }
 
@@ -103,6 +116,8 @@ class Item {
     double? ratingAvg,
     int? ratingCount,
     List<double>? priceHistory,
+    List<Variant>? variants,
+    String? variantSelectedId,
   }) {
     return Item(
       id: id,
@@ -122,6 +137,8 @@ class Item {
       ratingAvg: ratingAvg ?? this.ratingAvg,
       ratingCount: ratingCount ?? this.ratingCount,
       priceHistory: priceHistory ?? this.priceHistory,
+      variants: variants ?? this.variants,
+      variantSelectedId: variantSelectedId ?? this.variantSelectedId,
     );
   }
 

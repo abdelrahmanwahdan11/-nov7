@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/pagination_mixin.dart';
@@ -11,6 +15,7 @@ import '../data/models/collection.dart';
 import '../data/models/item.dart';
 import '../data/models/offer.dart';
 import '../data/models/review.dart';
+import '../data/models/variant.dart';
 
 const _itemsKey = 'items.json';
 const _favoritesKey = 'favorites.ids';
@@ -138,6 +143,9 @@ class ItemsController with PaginationMixin {
       <String, ValueNotifier<List<Review>>>{};
   final Map<String, List<double>> _priceHistory = <String, List<double>>{};
   List<Collection> _collections = <Collection>[];
+  final Map<String, String?> _selectedVariants = <String, String?>{};
+  final Map<String, _ItemInteraction> _interactionScores =
+      <String, _ItemInteraction>{};
 
   ValueListenable<List<Item>> get visibleItemsListenable => _visibleItemsNotifier;
   ValueListenable<bool> get loadingListenable => _isLoadingNotifier;
@@ -363,34 +371,104 @@ class ItemsController with PaginationMixin {
 
   Future<void> toggleFavorite(String itemId) async {
     final favorites = <String>{..._favoritesNotifier.value};
-    if (!favorites.add(itemId)) {
+    final bool isFavorite;
+    if (favorites.contains(itemId)) {
       favorites.remove(itemId);
+      isFavorite = false;
+    } else {
+      favorites.add(itemId);
+      isFavorite = true;
     }
     _favoritesNotifier.value = favorites;
     _favoritesStreamController.add(favorites);
     await _prefs.setStringList(_favoritesKey, favorites.toList());
+    _bumpInteraction(itemId, favorites: isFavorite ? 1 : -1);
   }
 
   Future<void> toggleCompare(String itemId) async {
     final compare = <String>{..._compareNotifier.value};
+    final bool added;
     if (compare.contains(itemId)) {
       compare.remove(itemId);
+      added = false;
     } else if (compare.length < 3) {
       compare.add(itemId);
+      added = true;
+    } else {
+      added = false;
     }
     _compareNotifier.value = compare;
     _compareStreamController.add(compare);
     await _prefs.setStringList(_compareKey, compare.toList());
+    if (added || !compare.contains(itemId)) {
+      _bumpInteraction(itemId, compare: added ? 1 : -1);
+    }
   }
 
   Future<void> toggleWishlist(String itemId) async {
     final wishlist = <String>{..._wishlistNotifier.value};
-    if (!wishlist.add(itemId)) {
+    final bool added;
+    if (wishlist.contains(itemId)) {
       wishlist.remove(itemId);
+      added = false;
+    } else {
+      wishlist.add(itemId);
+      added = true;
     }
     _wishlistNotifier.value = wishlist;
     _wishlistStreamController.add(wishlist);
     await _persistWishlist();
+    _bumpInteraction(itemId, wishlist: added ? 1 : -1);
+  }
+
+  void setVariantSelection(String itemId, String? variantId) {
+    _selectedVariants[itemId] = variantId;
+  }
+
+  Variant? selectedVariant(String itemId) {
+    final item = getById(itemId);
+    if (item == null || item.variants == null) {
+      return null;
+    }
+    final selection = _selectedVariants[itemId] ?? item.variantSelectedId;
+    if (selection == null) {
+      return null;
+    }
+    for (final variant in item.variants!) {
+      if (variant.id == selection) {
+        return variant;
+      }
+    }
+    return null;
+  }
+
+  double displayPrice(Item item) {
+    Variant? variant = selectedVariant(item.id);
+    if (variant == null && item.variants != null && item.variantSelectedId != null) {
+      for (final entry in item.variants!) {
+        if (entry.id == item.variantSelectedId) {
+          variant = entry;
+          break;
+        }
+      }
+    }
+    final base = item.price ?? 0;
+    if (variant == null) {
+      return base;
+    }
+    return base + variant.priceDelta;
+  }
+
+  List<String> displayImages(Item item) {
+    final variant = selectedVariant(item.id);
+    if (variant?.images != null && variant!.images!.isNotEmpty) {
+      return variant.images!;
+    }
+    return item.images;
+  }
+
+  void recordView(String itemId) {
+    _bumpInteraction(itemId, views: 1);
   }
 
   ValueListenable<List<Review>> reviewsListenable(String itemId) {
@@ -472,6 +550,53 @@ class ItemsController with PaginationMixin {
       return b.item.createdAt.compareTo(a.item.createdAt);
     });
     return scored.take(limit).map((entry) => entry.item).toList();
+  }
+
+  List<Item> recommenderV2({int limit = 10}) {
+    if (_allItems.isEmpty) {
+      return const <Item>[];
+    }
+    if (_interactionScores.isEmpty) {
+      return _allItems.take(limit).toList();
+    }
+    final scored = <_ScoredItem>[];
+    for (final item in _allItems) {
+      final stats = _interactionScores[item.id];
+      if (stats == null) {
+        continue;
+      }
+      final tagBoost = stats.tagOverlap == 0 ? _estimateTagOverlap(item) : stats.tagOverlap;
+      final score = stats.views + stats.favorites * 3 + stats.compare * 2 + stats.wishlist * 2 + tagBoost;
+      if (score > 0) {
+        scored.add(_ScoredItem(item, score));
+      }
+    }
+    scored.sort((a, b) {
+      final cmp = b.score.compareTo(a.score);
+      if (cmp != 0) {
+        return cmp;
+      }
+      return b.item.createdAt.compareTo(a.item.createdAt);
+    });
+    if (scored.isEmpty) {
+      return _allItems.take(limit).toList();
+    }
+    return scored.take(limit).map((entry) => entry.item).toList();
+  }
+
+  Future<Uint8List?> snapshotItem(GlobalKey boundaryKey) async {
+    final context = boundaryKey.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) {
+      return null;
+    }
+    final pixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    final image = await renderObject.toImage(pixelRatio: pixelRatio);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData?.buffer.asUint8List();
   }
 
   Future<void> addItem(Item item) async {
@@ -658,6 +783,49 @@ class ItemsController with PaginationMixin {
     await _prefs.setString(_priceHistoryKey, encoded);
   }
 
+  void _bumpInteraction(
+    String itemId, {
+    int views = 0,
+    int favorites = 0,
+    int compare = 0,
+    int wishlist = 0,
+  }) {
+    if (views == 0 && favorites == 0 && compare == 0 && wishlist == 0) {
+      return;
+    }
+    final metrics =
+        _interactionScores.putIfAbsent(itemId, () => _ItemInteraction());
+    metrics
+      ..views = max(0, metrics.views + views)
+      ..favorites = max(0, metrics.favorites + favorites)
+      ..compare = max(0, metrics.compare + compare)
+      ..wishlist = max(0, metrics.wishlist + wishlist);
+    final item = getById(itemId);
+    if (item != null) {
+      metrics.tagOverlap = max(metrics.tagOverlap, _estimateTagOverlap(item));
+    }
+    _interactionScores[itemId] = metrics;
+  }
+
+  int _estimateTagOverlap(Item item) {
+    if (item.tags.isEmpty) {
+      return 0;
+    }
+    final tags = item.tags.toSet();
+    int best = 0;
+    for (final id in _favoritesNotifier.value) {
+      final favorite = getById(id);
+      if (favorite == null || favorite.tags.isEmpty) {
+        continue;
+      }
+      final overlap = favorite.tags.where(tags.contains).length;
+      if (overlap > best) {
+        best = overlap;
+      }
+    }
+    return best;
+  }
+
   void _syncItemsFromHistory() {
     if (_priceHistory.isEmpty) {
       return;
@@ -710,4 +878,20 @@ class _ScoredItem {
 
   final Item item;
   final int score;
+}
+
+class _ItemInteraction {
+  _ItemInteraction({
+    this.views = 0,
+    this.favorites = 0,
+    this.compare = 0,
+    this.wishlist = 0,
+    this.tagOverlap = 0,
+  });
+
+  int views;
+  int favorites;
+  int compare;
+  int wishlist;
+  int tagOverlap;
 }

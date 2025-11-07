@@ -1,5 +1,6 @@
 import 'package:brewbliss_market/data/models/item.dart';
 import 'package:brewbliss_market/data/models/offer.dart';
+import 'package:brewbliss_market/data/models/variant.dart';
 
 final List<Item> seedItems = [
   Item(
@@ -22,6 +23,29 @@ final List<Item> seedItems = [
     allowOffers: true,
     ownerId: null,
     createdAt: DateTime.now(),
+    tags: const ['cozy', 'limited', 'ceramic'],
+    priceHistory: const [3.20, 3.40, 3.60],
+    variants: const [
+      Variant(
+        id: 'cloud_creme',
+        name: 'Cloud Crème',
+        attrs: {'Finish': 'Matte'},
+        priceDelta: 0,
+        images: [
+          'https://images.unsplash.com/photo-1527169402691-feff5539e52c',
+        ],
+      ),
+      Variant(
+        id: 'storm_blue',
+        name: 'Storm Blue',
+        attrs: {'Finish': 'Glossy'},
+        priceDelta: 0.9,
+        images: [
+          'https://images.unsplash.com/photo-1517705008128-361805f42e86',
+        ],
+      ),
+    ],
+    variantSelectedId: 'cloud_creme',
   ),
   Item(
     id: 'it_copper_press_02',
@@ -42,6 +66,8 @@ final List<Item> seedItems = [
     allowOffers: true,
     ownerId: null,
     createdAt: DateTime.now().subtract(const Duration(days: 1)),
+    tags: const ['brewer', 'copper', 'artisan'],
+    priceHistory: const [62.0, 59.0, 58.0],
   ),
   Item(
     id: 'it_portafilter_03',
@@ -62,6 +88,8 @@ final List<Item> seedItems = [
     allowOffers: false,
     ownerId: null,
     createdAt: DateTime.now().subtract(const Duration(days: 2)),
+    tags: const ['espresso', 'walnut', 'pro'],
+    priceHistory: const [44.0, 43.0, 42.5],
   ),
   Item(
     id: 'it_scale_04',
@@ -82,6 +110,8 @@ final List<Item> seedItems = [
     allowOffers: true,
     ownerId: null,
     createdAt: DateTime.now().subtract(const Duration(days: 3)),
+    tags: const ['smart', 'scale', 'pour-over'],
+    priceHistory: const [85.0, 82.5, 79.0],
   ),
   Item(
     id: 'it_kettle_05',

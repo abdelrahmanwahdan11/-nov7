@@ -1,0 +1,49 @@
+import 'dart:convert';
+
+class Variant {
+  const Variant({
+    required this.id,
+    required this.name,
+    required this.attrs,
+    this.priceDelta = 0,
+    this.images,
+  });
+
+  factory Variant.fromJson(Map<String, dynamic> json) {
+    return Variant(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      attrs: (json['attrs'] as Map).map((key, value) => MapEntry('$key', '$value')),
+      priceDelta: (json['priceDelta'] as num?)?.toDouble() ?? 0,
+      images: (json['images'] as List<dynamic>?)?.cast<String>(),
+    );
+  }
+
+  final String id;
+  final String name;
+  final Map<String, String> attrs;
+  final double priceDelta;
+  final List<String>? images;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'attrs': attrs,
+      'priceDelta': priceDelta,
+      'images': images,
+    };
+  }
+
+  static String encodeList(List<Variant> variants) {
+    return jsonEncode(variants.map((variant) => variant.toJson()).toList());
+  }
+
+  static List<Variant> decodeList(String source) {
+    final list = jsonDecode(source) as List<dynamic>;
+    return list
+        .map((entry) => Variant.fromJson(
+            (entry as Map<dynamic, dynamic>).cast<String, dynamic>()))
+        .toList();
+  }
+}
