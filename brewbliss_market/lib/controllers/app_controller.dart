@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/design_tokens.dart';
@@ -12,7 +13,11 @@ const _firstLaunchKey = 'firstLaunchDone';
 const _coachKey = 'coach.pending';
 
 class AppController extends ChangeNotifier {
-  AppController._(this._prefs, this._bottomNavIndex, this._firstLaunchPending, this._tutorialPending);
+  AppController._(this._prefs, this._bottomNavIndex, this._firstLaunchPending,
+      this._tutorialPending) {
+    _notificationController = StreamController<AppNotification>.broadcast();
+    _notificationNotifier = ValueNotifier<AppNotification?>(null);
+  }
 
   static Future<AppController> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,6 +47,8 @@ class AppController extends ChangeNotifier {
   Color _primaryColor = DesignTokens.primary;
   bool _firstLaunchPending;
   bool _tutorialPending;
+  late final StreamController<AppNotification> _notificationController;
+  late final ValueNotifier<AppNotification?> _notificationNotifier;
 
   ValueNotifier<int> get bottomNavNotifier => _bottomNavIndex;
   int get bottomNavIndex => _bottomNavIndex.value;
@@ -50,6 +57,9 @@ class AppController extends ChangeNotifier {
   Color get primaryColor => _primaryColor;
   bool get shouldShowCoachMarks => _tutorialPending;
   bool get isFirstLaunch => _firstLaunchPending;
+  Stream<AppNotification> get notificationStream => _notificationController.stream;
+  ValueListenable<AppNotification?> get lastNotificationListenable =>
+      _notificationNotifier;
 
   Future<void> updateBottomNav(int index) async {
     if (_bottomNavIndex.value == index) return;
@@ -111,9 +121,47 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void showNotification(AppNotification notification) {
+    _notificationNotifier.value = notification;
+    _notificationController.add(notification);
+  }
+
+  Future<void> shareOrCopy(String text, {String? url}) async {
+    final buffer = StringBuffer(text.trim());
+    if (url != null && url.isNotEmpty) {
+      if (buffer.isNotEmpty) {
+        buffer.writeln();
+      }
+      buffer.write(url);
+    }
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    showNotification(
+      AppNotification(
+        message: 'Copied to clipboard',
+        type: AppNotificationType.info,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _bottomNavIndex.dispose();
+    _notificationNotifier.dispose();
+    _notificationController.close();
     super.dispose();
   }
+}
+
+enum AppNotificationType { info, success, warning, error }
+
+class AppNotification {
+  const AppNotification({
+    required this.message,
+    this.description,
+    this.type = AppNotificationType.info,
+  });
+
+  final String message;
+  final String? description;
+  final AppNotificationType type;
 }

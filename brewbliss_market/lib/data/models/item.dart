@@ -15,6 +15,10 @@ class Item {
     required this.allowOffers,
     this.ownerId,
     required this.createdAt,
+    this.tags = const <String>[],
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.priceHistory = const <double>[],
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -32,6 +36,13 @@ class Item {
       allowOffers: json['allowOffers'] as bool,
       ownerId: json['ownerId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? const <String>[],
+      ratingAvg: (json['ratingAvg'] as num?)?.toDouble() ?? 0,
+      ratingCount: json['ratingCount'] as int? ?? 0,
+      priceHistory: (json['priceHistory'] as List<dynamic>?)
+              ?.map((value) => (value as num).toDouble())
+              .toList() ??
+          const <double>[],
     );
   }
 
@@ -48,6 +59,10 @@ class Item {
   final bool allowOffers;
   final String? ownerId;
   final DateTime createdAt;
+  final List<String> tags;
+  final double ratingAvg;
+  final int ratingCount;
+  final List<double> priceHistory;
 
   Map<String, dynamic> toJson() {
     return {
@@ -64,6 +79,10 @@ class Item {
       'allowOffers': allowOffers,
       'ownerId': ownerId,
       'createdAt': createdAt.toIso8601String(),
+      'tags': tags,
+      'ratingAvg': ratingAvg,
+      'ratingCount': ratingCount,
+      'priceHistory': priceHistory,
     };
   }
 
@@ -80,6 +99,10 @@ class Item {
     bool? allowOffers,
     String? ownerId,
     DateTime? createdAt,
+    List<String>? tags,
+    double? ratingAvg,
+    int? ratingCount,
+    List<double>? priceHistory,
   }) {
     return Item(
       id: id,
@@ -95,6 +118,10 @@ class Item {
       allowOffers: allowOffers ?? this.allowOffers,
       ownerId: ownerId ?? this.ownerId,
       createdAt: createdAt ?? this.createdAt,
+      tags: tags ?? this.tags,
+      ratingAvg: ratingAvg ?? this.ratingAvg,
+      ratingCount: ratingCount ?? this.ratingCount,
+      priceHistory: priceHistory ?? this.priceHistory,
     );
   }
 
