@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'controllers/app_controller.dart';
 import 'controllers/auth_controller.dart';
@@ -23,7 +23,6 @@ import 'features/splash/splash_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final appController = await AppController.init();
   final itemsController = await ItemsController.init();
   final authController = AuthController();
@@ -78,7 +77,12 @@ class _BrewBlissAppState extends State<BrewBlissApp> {
             theme: theme,
             locale: locale,
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: const [AppLocalizationsDelegate()],
+            localizationsDelegates: const [
+              AppLocalizationsDelegate(),
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             initialRoute: '/splash',
             routes: {
               '/splash': (_) => SplashPage(

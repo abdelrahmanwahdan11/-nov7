@@ -6,6 +6,7 @@ import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
 import '../../widgets/item_card_3d.dart';
+import '../../core/utils/responsive.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key, required this.itemsController});
@@ -57,23 +58,50 @@ class _SearchPageState extends State<SearchPage> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: items.isEmpty
-                  ? Center(
-                      child: Text(_queryController.text.isEmpty
-                          ? loc.translate('searchAnything')
-                          : loc.translate('emptyState')),
-                    )
-                  : ListView.separated(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (items.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _queryController.text.isEmpty
+                            ? loc.translate('searchAnything')
+                            : loc.translate('emptyState'),
+                      ),
+                    );
+                  }
+                  final crossAxisCount = responsiveCrossAxisCount(constraints.maxWidth);
+                  if (crossAxisCount == 1) {
+                    return ListView.separated(
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final item = items[index];
-                        return SizedBox(
-                          height: 220,
-                          child: ItemCard3D(item: item, itemsController: widget.itemsController),
+                        return ItemCard3D(
+                          item: item,
+                          itemsController: widget.itemsController,
                         );
                       },
+                    );
+                  }
+                  final aspectRatio = responsiveChildAspectRatio(crossAxisCount);
+                  return GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: aspectRatio,
                     ),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return ItemCard3D(
+                        item: item,
+                        itemsController: widget.itemsController,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),

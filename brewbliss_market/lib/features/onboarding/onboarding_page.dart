@@ -22,19 +22,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   late Timer _timer;
   int _index = 0;
 
-  final _slides = const [
-    (
-      'Brew & Collect',
-      'Discover coffee-inspired collectibles crafted with love.',
-    ),
-    (
-      'Rotate in 3D',
-      'Inspect every angle before you bring it home.',
-    ),
-    (
-      'Share the Joy',
-      'Sell or keep items while welcoming fresh offers.',
-    ),
+  final List<(String, String)> _slideKeys = const [
+    ('onboardTitle1', 'onboardDesc1'),
+    ('onboardTitle2', 'onboardDesc2'),
+    ('onboardTitle3', 'onboardDesc3'),
   ];
 
   @override
@@ -46,7 +37,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   void _nextPage() {
     if (!mounted) return;
-    if (_index < _slides.length - 1) {
+    if (_index < _slideKeys.length - 1) {
       _index++;
       _pageController.animateToPage(
         _index,
@@ -75,6 +66,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context);
+    final slides = _slideKeys
+        .map((keys) => (loc.translate(keys.$1), loc.translate(keys.$2)))
+        .toList();
     return Scaffold(
       backgroundColor: DesignTokens.background,
       body: SafeArea(
@@ -86,9 +80,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 onPageChanged: (value) {
                   setState(() => _index = value);
                 },
-                itemCount: _slides.length,
+                itemCount: _slideKeys.length,
                 itemBuilder: (context, index) {
-                  final data = _slides[index];
+                  final data = slides[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
                     child: Column(
@@ -116,7 +110,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Row(
+                    child: Row(
                 children: [
                   TextButton(
                     onPressed: _finish,
@@ -125,7 +119,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   const Spacer(),
                   Row(
                     children: List.generate(
-                      _slides.length,
+                      _slideKeys.length,
                       (index) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -143,7 +137,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   const Spacer(),
                   ElevatedButton(
                     onPressed: _nextPage,
-                    child: Text(_index == _slides.length - 1
+                    child: Text(_index == _slideKeys.length - 1
                         ? loc.translate('getStarted')
                         : loc.translate('next')),
                   ),

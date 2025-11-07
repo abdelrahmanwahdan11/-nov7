@@ -88,8 +88,11 @@ class _FrontFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final width = (media.size.width * 0.85).clamp(280.0, 520.0).toDouble();
+    final viewerSize = (width - 32).clamp(220.0, media.size.height * 0.6).toDouble();
     return Container(
-      width: MediaQuery.of(context).size.width * 0.8,
+      width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -100,7 +103,7 @@ class _FrontFace extends StatelessWidget {
         children: [
           if (item.model3d != null)
             SizedBox.square(
-              dimension: MediaQuery.of(context).size.width * 0.6,
+              dimension: viewerSize,
               child: ThreeDViewer(modelUrl: item.model3d!),
             )
           else
@@ -111,6 +114,11 @@ class _FrontFace extends StatelessWidget {
                 child: Image.network(
                   item.images.first,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: DesignTokens.muted.withOpacity(0.2),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.broken_image_outlined),
+                  ),
                 ),
               ),
             ),
@@ -133,34 +141,39 @@ class _BackFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final width = (media.size.width * 0.85).clamp(280.0, 520.0).toDouble();
+    final maxHeight = media.size.height * 0.7;
     return Container(
-      width: MediaQuery.of(context).size.width * 0.8,
+      width: width,
+      constraints: BoxConstraints(maxHeight: maxHeight),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.description,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          ...item.attrs.entries.map(
-            (e) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Text('${e.key}: ${e.value}'),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.description,
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            loc.translate('tapCards'),
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-        ],
+            const SizedBox(height: 12),
+            ...item.attrs.entries.map(
+              (e) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text('${e.key}: ${e.value}'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              loc.translate('tapCards'),
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ],
+        ),
       ),
     );
   }

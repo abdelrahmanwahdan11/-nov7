@@ -37,9 +37,15 @@ class SettingsPage extends StatelessWidget {
             title: Text(loc.translate('language')),
             trailing: DropdownButton<String>(
               value: appController.locale.languageCode,
-              items: const [
-                DropdownMenuItem(value: 'en', child: Text('English')),
-                DropdownMenuItem(value: 'ar', child: Text('العربية')),
+              items: [
+                DropdownMenuItem(
+                  value: 'en',
+                  child: Text(loc.translate('languageEnglish')),
+                ),
+                DropdownMenuItem(
+                  value: 'ar',
+                  child: Text(loc.translate('languageArabic')),
+                ),
               ],
               onChanged: (value) {
                 if (value != null) appController.setLocale(value);
