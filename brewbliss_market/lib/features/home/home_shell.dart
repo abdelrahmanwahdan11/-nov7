@@ -4,6 +4,7 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 import '../../controllers/app_controller.dart';
 import '../../controllers/items_controller.dart';
+import '../../controllers/search_controller.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../widgets/app_bottom_nav.dart';
 import '../catalog/catalog_page.dart';
@@ -11,16 +12,21 @@ import '../compare/compare_page.dart';
 import '../home/home_page.dart';
 import '../my_items/my_items_page.dart';
 import '../settings/settings_page.dart';
+import '../cart/cart_controller.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
     required this.appController,
     required this.itemsController,
+    required this.cartController,
+    required this.searchController,
   });
 
   final AppController appController;
   final ItemsController itemsController;
+  final CartController cartController;
+  final SearchController searchController;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -48,12 +54,20 @@ class _HomeShellState extends State<HomeShell> {
     _pages = [
       HomePage(
         itemsController: widget.itemsController,
+        cartController: widget.cartController,
         searchKey: _searchKey,
         heroKey: _heroKey,
         firstCardKey: _firstCardKey,
       ),
-      CatalogPage(itemsController: widget.itemsController),
-      ComparePage(itemsController: widget.itemsController),
+      CatalogPage(
+        itemsController: widget.itemsController,
+        searchController: widget.searchController,
+        cartController: widget.cartController,
+      ),
+      ComparePage(
+        itemsController: widget.itemsController,
+        cartController: widget.cartController,
+      ),
       MyItemsPage(itemsController: widget.itemsController, fabKey: _fabKey),
       SettingsPage(appController: widget.appController, itemsController: widget.itemsController),
     ];

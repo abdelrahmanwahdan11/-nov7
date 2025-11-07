@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/local/sample_data.dart';
@@ -10,6 +14,7 @@ import '../data/models/collection.dart';
 import '../data/models/item.dart';
 import '../data/models/offer.dart';
 import '../data/models/review.dart';
+import '../data/models/variant.dart';
 
 const _itemsKey = 'items.json';
 const _favoritesKey = 'favorites.ids';
@@ -19,6 +24,8 @@ const _wishlistKey = 'wishlist.ids';
 const _collectionsKey = 'collections.json';
 const _reviewsKey = 'reviews.json';
 const _priceHistoryKey = 'price_history.json';
+const _variantSelectionKey = 'variant.selection';
+const _metricsKey = 'interaction.metrics';
 
 class ItemsController {
   ItemsController._(this._prefs) {
@@ -64,6 +71,9 @@ class ItemsController {
   int _currentPage = 0;
   static const _pageSize = 12;
   Map<String, List<double>> _priceHistory = {};
+  Map<String, String?> _variantSelections = <String, String?>{};
+  Map<String, _InteractionSnapshot> _interactionMetrics =
+      <String, _InteractionSnapshot>{};
 
   ValueListenable<List<Item>> get visibleItemsListenable => _visibleItemsNotifier;
   ValueListenable<Set<String>> get favoritesListenable => _favoritesNotifier;
@@ -127,6 +137,27 @@ class ItemsController {
       _priceHistory = {};
     }
 
+    final variantSelectionJson = _prefs.getString(_variantSelectionKey);
+    if (variantSelectionJson != null && variantSelectionJson.isNotEmpty) {
+      final decoded = jsonDecode(variantSelectionJson) as Map<String, dynamic>;
+      _variantSelections = decoded.map((key, value) => MapEntry(key, value as String?));
+    } else {
+      _variantSelections = <String, String?>{};
+    }
+
+    final metricsJson = _prefs.getString(_metricsKey);
+    if (metricsJson != null && metricsJson.isNotEmpty) {
+      final decoded = jsonDecode(metricsJson) as Map<String, dynamic>;
+      _interactionMetrics = decoded.map(
+        (key, value) => MapEntry(
+          key,
+          _InteractionSnapshot.fromJson(value as Map<String, dynamic>),
+        ),
+      );
+    } else {
+      _interactionMetrics = <String, _InteractionSnapshot>{};
+    }
+
     _favoritesNotifier.value = {...favIds};
     _compareNotifier.value = {...compareIds};
     _wishlistNotifier.value = {...wishlistIds};
@@ -152,13 +183,18 @@ class ItemsController {
       final ratingAvg = ratingCount == 0
           ? (item.ratingAvg == 0 ? 0.0 : item.ratingAvg)
           : itemReviews.fold<double>(0, (acc, r) => acc + r.stars) / ratingCount;
+      final selection = _resolveInitialVariantSelection(item);
       return item.copyWith(
         priceHistory: history,
         ratingCount: ratingCount,
         ratingAvg: double.parse(ratingAvg.toStringAsFixed(2)),
         tags: item.tags.isEmpty ? _deriveTags(item) : item.tags,
+        variants: item.variants,
+        variantSelectedId: selection,
       );
     }).toList();
+
+    await _persistVariantSelections();
 
     await refresh(resetPage: true);
     _scheduleOfferSimulation();
@@ -192,16 +228,21 @@ class ItemsController {
 
   Future<void> toggleFavorite(String itemId) async {
     final favorites = {..._favoritesNotifier.value};
+    final wasFavorite = favorites.contains(itemId);
     if (!favorites.add(itemId)) {
       favorites.remove(itemId);
     }
     _favoritesNotifier.value = favorites;
     _favoritesStreamController.add(favorites);
     await _prefs.setStringList(_favoritesKey, favorites.toList());
+    if (!wasFavorite && favorites.contains(itemId)) {
+      _recordInteraction(itemId, favorites: 1);
+    }
   }
 
   Future<void> toggleCompare(String itemId) async {
     final compare = {..._compareNotifier.value};
+    final wasCompared = compare.contains(itemId);
     if (compare.contains(itemId)) {
       compare.remove(itemId);
     } else if (compare.length < 3) {
@@ -210,6 +251,9 @@ class ItemsController {
     _compareNotifier.value = compare;
     _compareStreamController.add(compare);
     await _prefs.setStringList(_compareKey, compare.toList());
+    if (!wasCompared && compare.contains(itemId)) {
+      _recordInteraction(itemId, compare: 1);
+    }
   }
 
   Future<void> addOrUpdateItem(Item item) async {
@@ -238,15 +282,121 @@ class ItemsController {
 
   Future<void> toggleWishlist(String itemId) async {
     final wishlist = {..._wishlistNotifier.value};
+    final wasWishlisted = wishlist.contains(itemId);
     if (!wishlist.add(itemId)) {
       wishlist.remove(itemId);
     }
     _wishlistNotifier.value = wishlist;
     _wishlistStreamController.add(wishlist);
     await _prefs.setStringList(_wishlistKey, wishlist.toList());
+    if (!wasWishlisted && wishlist.contains(itemId)) {
+      _recordInteraction(itemId, wishlist: 1);
+    }
   }
 
   bool isWishlisted(String itemId) => _wishlistNotifier.value.contains(itemId);
+
+  String? selectedVariantId(String itemId) => _variantSelections[itemId];
+
+  Variant? selectedVariant(String itemId) {
+    final selection = selectedVariantId(itemId);
+    final item = getById(itemId);
+    if (selection == null || item?.variants == null) {
+      return null;
+    }
+    try {
+      return item!.variants!.firstWhere((variant) => variant.id == selection);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setVariantSelection(String itemId, String? variantId) async {
+    if (variantId == null) {
+      _variantSelections.remove(itemId);
+    } else {
+      _variantSelections[itemId] = variantId;
+    }
+    await _persistVariantSelections();
+  }
+
+  double? priceFor(String itemId, {String? variantId}) {
+    final item = getById(itemId);
+    if (item == null) {
+      return null;
+    }
+    final base = item.price;
+    if (base == null) {
+      return null;
+    }
+    final selection = variantId ?? selectedVariantId(itemId);
+    if (selection != null && item.variants != null) {
+      try {
+        final variant = item.variants!.firstWhere((element) => element.id == selection);
+        return base + variant.priceDelta;
+      } catch (_) {
+        return base;
+      }
+    }
+    return base;
+  }
+
+  List<Item> recommenderV2({int count = 10}) {
+    if (_allItems.isEmpty) {
+      return const <Item>[];
+    }
+    final focusIds = <String>{
+      ..._favoritesNotifier.value,
+      ..._wishlistNotifier.value,
+      ..._compareNotifier.value,
+    };
+    final focusTags = <String>{};
+    final focusCategories = <String>[];
+    for (final id in focusIds) {
+      final item = getById(id);
+      if (item == null) continue;
+      focusTags.addAll(item.tags);
+      focusCategories.add(item.category);
+    }
+    final primaryCategory = _mostCommonCategory(focusCategories);
+    final now = DateTime.now();
+    final scored = _allItems.map((item) {
+      final metrics = _interactionMetrics[item.id] ?? const _InteractionSnapshot();
+      final tagOverlap = item.tags.where(focusTags.contains).length;
+      final categoryBoost = primaryCategory != null && item.category == primaryCategory ? 2.0 : 0.0;
+      final recency = now.difference(item.createdAt).inDays + 1;
+      final recencyBoost = 3 / recency;
+      final score = metrics.views * 1.0 +
+          metrics.favoriteAdds * 3.0 +
+          metrics.compareAdds * 2.0 +
+          metrics.wishlistAdds * 2.0 +
+          tagOverlap.toDouble() +
+          categoryBoost +
+          recencyBoost;
+      return _ScoredItem(item: item, score: score);
+    }).toList();
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    return scored.take(count).map((entry) => entry.item).toList();
+  }
+
+  void trackView(String itemId) {
+    _recordInteraction(itemId, views: 1);
+  }
+
+  Future<Uint8List?> snapshotItem(GlobalKey boundaryKey) async {
+    final boundary = boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      return null;
+    }
+    final platformDispatcher = ui.PlatformDispatcher.instance;
+    final ratio = platformDispatcher.views.isNotEmpty
+        ? platformDispatcher.views.first.devicePixelRatio
+        : 2.0;
+    final pixelRatio = ratio.clamp(1.5, 3.0).toDouble();
+    final image = await boundary.toImage(pixelRatio: pixelRatio);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData?.buffer.asUint8List();
+  }
 
   Future<Collection> createCollection(String name) async {
     final collection = Collection(
@@ -542,6 +692,70 @@ class ItemsController {
     });
   }
 
+  String? _resolveInitialVariantSelection(Item item) {
+    if (_variantSelections.containsKey(item.id)) {
+      return _variantSelections[item.id];
+    }
+    if (item.variantSelectedId != null) {
+      _variantSelections[item.id] = item.variantSelectedId;
+      return item.variantSelectedId;
+    }
+    if (item.variants != null && item.variants!.isNotEmpty) {
+      final first = item.variants!.first.id;
+      _variantSelections[item.id] = first;
+      return first;
+    }
+    return null;
+  }
+
+  String? _mostCommonCategory(List<String> categories) {
+    if (categories.isEmpty) {
+      return null;
+    }
+    final counts = <String, int>{};
+    for (final category in categories) {
+      counts.update(category, (value) => value + 1, ifAbsent: () => 1);
+    }
+    counts.removeWhere((key, value) => value == 0);
+    if (counts.isEmpty) {
+      return null;
+    }
+    counts.entries.toList().sort((a, b) => b.value.compareTo(a.value));
+    return counts.entries.first.key;
+  }
+
+  void _recordInteraction(
+    String itemId, {
+    int views = 0,
+    int favorites = 0,
+    int compare = 0,
+    int wishlist = 0,
+  }) {
+    final current = _interactionMetrics[itemId] ?? const _InteractionSnapshot();
+    final updated = current.copyWith(
+      views: current.views + views,
+      favoriteAdds: current.favoriteAdds + favorites,
+      compareAdds: current.compareAdds + compare,
+      wishlistAdds: current.wishlistAdds + wishlist,
+    );
+    _interactionMetrics[itemId] = updated;
+    _persistMetrics();
+  }
+
+  Future<void> _persistVariantSelections() async {
+    await _prefs.setString(
+      _variantSelectionKey,
+      jsonEncode(_variantSelections.map((key, value) => MapEntry(key, value))),
+    );
+  }
+
+  Future<void> _persistMetrics() async {
+    final map = _interactionMetrics.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+    await _prefs.setString(_metricsKey, jsonEncode(map));
+  }
+
   Future<void> _persistItems() async {
     await _prefs.setString(_itemsKey, Item.encodeList(_allItems));
   }
@@ -633,4 +847,57 @@ class ItemsController {
     }
     return score;
   }
+}
+
+class _InteractionSnapshot {
+  const _InteractionSnapshot({
+    this.views = 0,
+    this.favoriteAdds = 0,
+    this.compareAdds = 0,
+    this.wishlistAdds = 0,
+  });
+
+  factory _InteractionSnapshot.fromJson(Map<String, dynamic> json) {
+    return _InteractionSnapshot(
+      views: json['views'] as int? ?? 0,
+      favoriteAdds: json['favoriteAdds'] as int? ?? 0,
+      compareAdds: json['compareAdds'] as int? ?? 0,
+      wishlistAdds: json['wishlistAdds'] as int? ?? 0,
+    );
+  }
+
+  final int views;
+  final int favoriteAdds;
+  final int compareAdds;
+  final int wishlistAdds;
+
+  _InteractionSnapshot copyWith({
+    int? views,
+    int? favoriteAdds,
+    int? compareAdds,
+    int? wishlistAdds,
+  }) {
+    return _InteractionSnapshot(
+      views: views ?? this.views,
+      favoriteAdds: favoriteAdds ?? this.favoriteAdds,
+      compareAdds: compareAdds ?? this.compareAdds,
+      wishlistAdds: wishlistAdds ?? this.wishlistAdds,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'views': views,
+      'favoriteAdds': favoriteAdds,
+      'compareAdds': compareAdds,
+      'wishlistAdds': wishlistAdds,
+    };
+  }
+}
+
+class _ScoredItem {
+  const _ScoredItem({required this.item, required this.score});
+
+  final Item item;
+  final double score;
 }

@@ -1,25 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 
+import '../../controllers/app_controller.dart';
 import '../../controllers/items_controller.dart';
+import '../../controllers/negotiation_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
+import '../../features/cart/cart_controller.dart';
+import '../common/snapshot_export.dart';
 import '../../widgets/image_overlay_flip.dart';
 import '../../widgets/price_badge.dart';
 import '../../widgets/three_d_viewer.dart';
+import 'widgets/negotiate_sheet.dart';
+import 'widgets/variant_selector.dart';
+import 'widgets/zoom_lens.dart';
 
 class ItemDetailPage extends StatefulWidget {
-  const ItemDetailPage({super.key, required this.itemId, required this.itemsController});
+  const ItemDetailPage({
+    super.key,
+    required this.itemId,
+    required this.itemsController,
+    required this.cartController,
+    required this.negotiationController,
+    required this.appController,
+  });
 
   final String itemId;
   final ItemsController itemsController;
+  final CartController cartController;
+  final NegotiationController negotiationController;
+  final AppController appController;
 
   @override
   State<ItemDetailPage> createState() => _ItemDetailPageState();
 }
 
 class _ItemDetailPageState extends State<ItemDetailPage> {
+  late final GlobalKey _snapshotKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotKey = GlobalKey();
+    widget.itemsController.trackView(widget.itemId);
+  }
+
   Item? get item => widget.itemsController.getById(widget.itemId);
 
   @override
@@ -32,22 +58,34 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         body: Center(child: Text(loc.translate('emptyState'))),
       );
     }
+    final effectivePrice = widget.itemsController.priceFor(currentItem.id) ?? currentItem.price;
+    final selectedVariantId = widget.itemsController.selectedVariantId(currentItem.id);
     return Scaffold(
       appBar: AppBar(
         title: Text(currentItem.name),
+        actions: [
+          SnapshotButton(
+            boundaryKey: _snapshotKey,
+            itemsController: widget.itemsController,
+            appController: widget.appController,
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: GestureDetector(
-              onTap: () => _openOverlay(currentItem),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
-                child: currentItem.model3d != null
-                    ? ThreeDViewer(modelUrl: currentItem.model3d!)
-                    : Image.network(currentItem.images.first, fit: BoxFit.cover),
+          RepaintBoundary(
+            key: _snapshotKey,
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: GestureDetector(
+                onTap: () => _openOverlay(currentItem),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+                  child: currentItem.model3d != null
+                      ? ThreeDViewer(modelUrl: currentItem.model3d!)
+                      : ZoomLens(imageUrl: currentItem.images.first),
+                ),
               ),
             ),
           ),
@@ -65,9 +103,18 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              if (currentItem.price != null)
-                PriceBadge(label: '\$${currentItem.price!.toStringAsFixed(2)}'),
+              if (effectivePrice != null)
+                PriceBadge(label: '\$${effectivePrice.toStringAsFixed(2)}'),
             ],
+          ),
+          const SizedBox(height: 16),
+          VariantSelector(
+            item: currentItem,
+            selectedId: selectedVariantId,
+            onChanged: (id) async {
+              await widget.itemsController.setVariantSelection(currentItem.id, id);
+              if (mounted) setState(() {});
+            },
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -101,6 +148,21 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   );
                 },
               ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await widget.cartController.add(currentItem.id,
+                      variantId: widget.itemsController.selectedVariantId(currentItem.id) ??
+                          currentItem.variants?.first.id,
+                      qty: 1);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(loc.translate('addToCart'))),
+                    );
+                  }
+                },
+                icon: const Icon(IconlyLight.bag_2),
+                label: Text(loc.translate('addToCart')),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -117,9 +179,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           _AttributesTable(item: currentItem),
           if (currentItem.allowOffers) ...[
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => _makeOffer(context, currentItem),
-              child: Text(loc.translate('makeOffer')),
+            OutlinedButton(
+              onPressed: () => _openNegotiation(context, currentItem),
+              child: Text(loc.translate('negotiate')),
             ),
           ],
         ],
@@ -142,42 +204,23 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
   }
 
-  Future<void> _makeOffer(BuildContext context, Item item) async {
-    final controller = TextEditingController();
-    final loc = AppLocalizations.of(context);
-    final amount = await showDialog<double>(
+  Future<void> _openNegotiation(BuildContext context, Item item) async {
+    await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
-        return AlertDialog(
-          title: Text(loc.translate('makeOffer')),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(prefixText: '\$'),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () {
-                final value = double.tryParse(controller.text);
-                if (value != null) {
-                  Navigator.of(context).pop(value);
-                }
-              },
-              child: const Text('OK'),
-            ),
-          ],
+          child: NegotiateSheet(
+            itemId: item.id,
+            negotiationController: widget.negotiationController,
+            itemsController: widget.itemsController,
+          ),
         );
       },
     );
-    if (amount != null) {
-      await widget.itemsController.makeOffer(item.id, amount);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${loc.translate('offers')}: ${amount.toStringAsFixed(2)}')),
-        );
-      }
-    }
   }
 
   void _showAiInfo(BuildContext context) {

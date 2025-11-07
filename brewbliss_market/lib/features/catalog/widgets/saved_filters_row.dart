@@ -8,11 +8,13 @@ class SavedFiltersRow extends StatelessWidget {
     required this.filters,
     this.onSelected,
     this.onDelete,
+    this.selectedId,
   });
 
   final List<SavedSearch> filters;
   final ValueChanged<SavedSearch>? onSelected;
   final ValueChanged<SavedSearch>? onDelete;
+  final String? selectedId;
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +31,11 @@ class SavedFiltersRow extends StatelessWidget {
           final filter = filters[index];
           return InputChip(
             label: Text(filter.name),
+            selected: selectedId == filter.id,
             onPressed: onSelected == null ? null : () => onSelected?.call(filter),
             onDeleted: onDelete == null ? null : () => onDelete?.call(filter),
             backgroundColor: colorScheme.surface,
+            selectedColor: colorScheme.primary.withOpacity(0.12),
             shape: StadiumBorder(
               side: BorderSide(color: colorScheme.primary.withOpacity(0.25)),
             ),
