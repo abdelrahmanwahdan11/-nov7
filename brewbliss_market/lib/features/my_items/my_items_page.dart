@@ -109,6 +109,13 @@ class _ItemsList extends StatelessWidget {
                           width: 80,
                           height: 80,
                           fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 80,
+                            height: 80,
+                            color: DesignTokens.muted.withOpacity(0.2),
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.broken_image_outlined),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),

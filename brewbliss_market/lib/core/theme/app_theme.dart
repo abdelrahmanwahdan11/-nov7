@@ -19,6 +19,7 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: DesignTokens.background,
       canvasColor: DesignTokens.background,
+      dividerColor: DesignTokens.muted.withOpacity(0.4),
       appBarTheme: AppBarTheme(
         backgroundColor: DesignTokens.background,
         elevation: 0,
@@ -41,6 +42,19 @@ class AppTheme {
           ),
         ),
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: DesignTokens.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          borderSide: const BorderSide(color: DesignTokens.muted, width: DesignTokens.strokeThin),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          borderSide: BorderSide(color: primaryColor, width: DesignTokens.strokeThin),
+        ),
+      ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: DesignTokens.surface,
         selectedColor: primaryColor,
@@ -60,6 +74,33 @@ class AppTheme {
           ),
         ),
       ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primaryColor,
+        foregroundColor: DesignTokens.onPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: DesignTokens.surface,
+        indicatorColor: primaryColor.withOpacity(0.12),
+        labelTextStyle: MaterialStateProperty.resolveWith(
+          (states) => GoogleFonts.inter(
+            color: states.contains(MaterialState.selected)
+                ? DesignTokens.ink
+                : DesignTokens.ink.withOpacity(0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        iconTheme: MaterialStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(MaterialState.selected)
+                ? primaryColor
+                : DesignTokens.ink.withOpacity(0.6),
+          ),
+        ),
+      ),
     );
   }
 
@@ -76,6 +117,7 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: DesignTokens.darkBackground,
       canvasColor: DesignTokens.darkBackground,
+      dividerColor: DesignTokens.darkInk.withOpacity(0.2),
       appBarTheme: AppBarTheme(
         backgroundColor: DesignTokens.darkBackground,
         elevation: 0,
@@ -98,6 +140,19 @@ class AppTheme {
           ),
         ),
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: DesignTokens.darkSurface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          borderSide: BorderSide(color: DesignTokens.darkInk.withOpacity(0.2), width: DesignTokens.strokeThin),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          borderSide: BorderSide(color: primaryColor, width: DesignTokens.strokeThin),
+        ),
+      ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: DesignTokens.darkSurface,
         selectedColor: primaryColor,
@@ -114,6 +169,33 @@ class AppTheme {
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+          ),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primaryColor,
+        foregroundColor: DesignTokens.onPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: DesignTokens.darkSurface,
+        indicatorColor: primaryColor.withOpacity(0.2),
+        labelTextStyle: MaterialStateProperty.resolveWith(
+          (states) => GoogleFonts.inter(
+            color: states.contains(MaterialState.selected)
+                ? DesignTokens.darkInk
+                : DesignTokens.darkInk.withOpacity(0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        iconTheme: MaterialStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(MaterialState.selected)
+                ? primaryColor
+                : DesignTokens.darkInk.withOpacity(0.6),
           ),
         ),
       ),

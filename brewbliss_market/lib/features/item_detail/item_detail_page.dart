@@ -5,7 +5,6 @@ import '../../controllers/items_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
-import '../../data/models/offer.dart';
 import '../../widgets/image_overlay_flip.dart';
 import '../../widgets/price_badge.dart';
 import '../../widgets/three_d_viewer.dart';
@@ -172,14 +171,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       },
     );
     if (amount != null) {
-      final offer = Offer(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        itemId: item.id,
-        buyer: 'Guest',
-        amount: amount,
-        createdAt: DateTime.now(),
-      );
-      await widget.itemsController.recordOffer(offer);
+      await widget.itemsController.makeOffer(item.id, amount, buyer: 'Guest');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${loc.translate('offers')}: ${amount.toStringAsFixed(2)}')),

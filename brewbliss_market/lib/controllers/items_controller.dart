@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,6 +44,9 @@ class ItemsController {
   bool _isFetching = false;
   int _currentPage = 0;
   static const _pageSize = 12;
+  final _random = Random();
+  Timer? _offerTimer;
+  bool _isDisposed = false;
 
   ValueListenable<List<Item>> get visibleItemsListenable => _visibleItemsNotifier;
   ValueListenable<Set<String>> get favoritesListenable => _favoritesNotifier;
@@ -70,7 +74,8 @@ class ItemsController {
 
     _favoritesNotifier.value = {...favIds};
     _compareNotifier.value = {...compareIds};
-    _offersNotifier.value = [...offers];
+    _offersNotifier.value = [...offers]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     await refresh(resetPage: true);
   }
 
@@ -134,9 +139,7 @@ class ItemsController {
   }
 
   Future<void> recordOffer(Offer offer) async {
-    final offers = [..._offersNotifier.value, offer];
-    _offersNotifier.value = offers;
-    await _prefs.setString(_offersKey, Offer.encodeList(offers));
+    await _addOffer(offer);
   }
 
   List<Item> get favoritesItems =>
@@ -172,7 +175,68 @@ class ItemsController {
     await _load();
   }
 
+  Future<void> makeOffer(String itemId, double amount, {String buyer = 'Guest'}) async {
+    final offer = Offer(
+      id: 'offer_${DateTime.now().millisecondsSinceEpoch}',
+      itemId: itemId,
+      buyer: buyer,
+      amount: double.parse(amount.toStringAsFixed(2)),
+      createdAt: DateTime.now(),
+    );
+    await _addOffer(offer);
+  }
+
+  void simulateIncomingOffers({
+    Duration minDelay = const Duration(seconds: 30),
+    Duration maxDelay = const Duration(seconds: 90),
+  }) {
+    if (minDelay >= maxDelay) {
+      throw ArgumentError('minDelay must be shorter than maxDelay');
+    }
+    _offerTimer?.cancel();
+
+    void scheduleNext() {
+      if (_isDisposed) return;
+      final minMs = minDelay.inMilliseconds;
+      final range = maxDelay.inMilliseconds - minMs;
+      final delay = minMs + (_random.nextInt(range > 0 ? range + 1 : 1));
+      _offerTimer = Timer(Duration(milliseconds: delay), () async {
+        await _generateRandomOffer();
+        scheduleNext();
+      });
+    }
+
+    scheduleNext();
+  }
+
+  Future<void> _generateRandomOffer() async {
+    final eligible = _allItems.where((item) => item.allowOffers).toList();
+    if (eligible.isEmpty) return;
+    final selected = eligible[_random.nextInt(eligible.length)];
+    final base = selected.price ?? 18 + _random.nextDouble() * 12;
+    final factor = 0.65 + _random.nextDouble() * 0.35;
+    final amount = double.parse((base * factor).toStringAsFixed(2));
+    await _addOffer(
+      Offer(
+        id: 'auto_${DateTime.now().microsecondsSinceEpoch}',
+        itemId: selected.id,
+        buyer: 'Collector #${100 + _random.nextInt(900)}',
+        amount: amount,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _addOffer(Offer offer) async {
+    final offers = [..._offersNotifier.value, offer]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _offersNotifier.value = offers;
+    await _prefs.setString(_offersKey, Offer.encodeList(offers));
+  }
+
   void dispose() {
+    _isDisposed = true;
+    _offerTimer?.cancel();
     _visibleItemsNotifier.dispose();
     _favoritesNotifier.dispose();
     _compareNotifier.dispose();

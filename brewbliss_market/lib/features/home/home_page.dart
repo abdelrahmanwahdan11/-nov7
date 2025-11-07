@@ -81,6 +81,13 @@ class _HomePageState extends State<HomePage> {
                       itemsController: widget.itemsController,
                     ))
                 .toList();
+            final width = MediaQuery.of(context).size.width;
+            final cardWidth = width >= 900
+                ? 260.0
+                : width >= 600
+                    ? 220.0
+                    : 200.0;
+            final cardHeight = width >= 900 ? 320.0 : 260.0;
             return ListView(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -97,7 +104,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: 260,
+                  height: cardHeight,
                   child: cards.isEmpty
                       ? const Center(child: CircularProgressIndicator())
                       : ListView.separated(
@@ -105,7 +112,7 @@ class _HomePageState extends State<HomePage> {
                           itemCount: cards.length,
                           separatorBuilder: (_, __) => const SizedBox(width: 16),
                           itemBuilder: (context, index) => SizedBox(
-                            width: 200,
+                            width: cardWidth,
                             child: index == 0
                                 ? KeyedSubtree(key: widget.firstCardKey, child: cards[index])
                                 : cards[index],
@@ -148,7 +155,7 @@ class _HomeHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Brew lover',
+                  loc.translate('brewLover'),
                   style: theme.textTheme.titleMedium,
                 ),
                 Text(
@@ -167,8 +174,9 @@ class _HomeHeader extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          'Brew Bliss\n${loc.translate('newCollection')}',
+          '${loc.translate('heroHeadline')}\n${loc.translate('newCollection')}',
           style: theme.textTheme.displayLarge,
+          textAlign: TextAlign.start,
         ),
         const SizedBox(height: 12),
         Row(
@@ -241,13 +249,21 @@ class _CarouselSection extends StatelessWidget {
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
-                      child: Image.network(item.images.first, fit: BoxFit.cover),
+                      child: Image.network(
+                        item.images.first,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: DesignTokens.muted.withOpacity(0.2),
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(item.name, style: Theme.of(context).textTheme.titleMedium),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () => Navigator.of(context).pushNamed('/item/${item.id}'),
                     child: Text(AppLocalizations.of(context).translate('placeOrder')),
                   ),
                 ],
