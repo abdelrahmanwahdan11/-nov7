@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'variant.dart';
+
 class Item {
   const Item({
     required this.id,
@@ -15,6 +17,15 @@ class Item {
     required this.allowOffers,
     this.ownerId,
     required this.createdAt,
+    this.tags = const [],
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.priceHistory = const [],
+    this.variants = const [],
+    this.variantSelectedId,
+    this.tagsSuggested = const [],
+    this.draft = false,
+    this.bundleId,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -32,6 +43,20 @@ class Item {
       allowOffers: json['allowOffers'] as bool,
       ownerId: json['ownerId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      tags: (json['tags'] as List?)?.cast<String>() ?? const [],
+      ratingAvg: (json['ratingAvg'] as num?)?.toDouble() ?? 0,
+      ratingCount: json['ratingCount'] as int? ?? 0,
+      priceHistory:
+          (json['priceHistory'] as List?)?.map((e) => (e as num).toDouble()).toList() ??
+              const [],
+      variants: (json['variants'] as List?)
+              ?.map((e) => Variant.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      variantSelectedId: json['variantSelectedId'] as String?,
+      tagsSuggested: (json['tagsSuggested'] as List?)?.cast<String>() ?? const [],
+      draft: json['draft'] as bool? ?? false,
+      bundleId: json['bundleId'] as String?,
     );
   }
 
@@ -48,6 +73,24 @@ class Item {
   final bool allowOffers;
   final String? ownerId;
   final DateTime createdAt;
+  final List<String> tags;
+  final double ratingAvg;
+  final int ratingCount;
+  final List<double> priceHistory;
+  final List<Variant> variants;
+  final String? variantSelectedId;
+  final List<String> tagsSuggested;
+  final bool draft;
+  final String? bundleId;
+
+  double get displayPrice {
+    final variant = variants.firstWhere(
+      (element) => element.id == variantSelectedId,
+      orElse: () => const Variant(id: 'base', name: 'Base', attrs: {}),
+    );
+    final base = price ?? 0;
+    return base + (variant.priceDelta);
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -64,6 +107,15 @@ class Item {
       'allowOffers': allowOffers,
       'ownerId': ownerId,
       'createdAt': createdAt.toIso8601String(),
+      'tags': tags,
+      'ratingAvg': ratingAvg,
+      'ratingCount': ratingCount,
+      'priceHistory': priceHistory,
+      'variants': variants.map((e) => e.toJson()).toList(),
+      'variantSelectedId': variantSelectedId,
+      'tagsSuggested': tagsSuggested,
+      'draft': draft,
+      'bundleId': bundleId,
     };
   }
 
@@ -80,6 +132,15 @@ class Item {
     bool? allowOffers,
     String? ownerId,
     DateTime? createdAt,
+    List<String>? tags,
+    double? ratingAvg,
+    int? ratingCount,
+    List<double>? priceHistory,
+    List<Variant>? variants,
+    String? variantSelectedId,
+    List<String>? tagsSuggested,
+    bool? draft,
+    String? bundleId,
   }) {
     return Item(
       id: id,
@@ -95,6 +156,15 @@ class Item {
       allowOffers: allowOffers ?? this.allowOffers,
       ownerId: ownerId ?? this.ownerId,
       createdAt: createdAt ?? this.createdAt,
+      tags: tags ?? this.tags,
+      ratingAvg: ratingAvg ?? this.ratingAvg,
+      ratingCount: ratingCount ?? this.ratingCount,
+      priceHistory: priceHistory ?? this.priceHistory,
+      variants: variants ?? this.variants,
+      variantSelectedId: variantSelectedId ?? this.variantSelectedId,
+      tagsSuggested: tagsSuggested ?? this.tagsSuggested,
+      draft: draft ?? this.draft,
+      bundleId: bundleId ?? this.bundleId,
     );
   }
 

@@ -1,7 +1,10 @@
+import 'package:brewbliss_market/data/models/bundle.dart';
+import 'package:brewbliss_market/data/models/collection.dart';
 import 'package:brewbliss_market/data/models/item.dart';
 import 'package:brewbliss_market/data/models/offer.dart';
+import 'package:brewbliss_market/data/models/variant.dart';
 
-final seedItems = [
+final seedItems = <Item>[
   Item(
     id: 'it_coffee_mug_01',
     name: 'Vanilla Cloud Mug',
@@ -11,7 +14,7 @@ final seedItems = [
       'https://images.unsplash.com/photo-1498804103079-a6351b050096',
     ],
     model3d: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
-    price: 3.60,
+    price: 18.60,
     attrs: const {
       'Volume': '350ml',
       'Material': 'Ceramic',
@@ -22,7 +25,244 @@ final seedItems = [
     allowOffers: true,
     ownerId: null,
     createdAt: DateTime.now(),
+    tags: const ['ceramic', 'vanilla', 'handmade'],
+    priceHistory: const [16.0, 17.2, 18.0, 18.6],
+    variants: const [
+      Variant(
+        id: 'mug_white',
+        name: 'Snow',
+        attrs: {'Color': 'White'},
+        priceDelta: 0,
+      ),
+      Variant(
+        id: 'mug_ink',
+        name: 'Ink',
+        attrs: {'Color': 'Navy'},
+        priceDelta: 2,
+      ),
+    ],
+  ),
+  Item(
+    id: 'it_coffee_mug_02',
+    name: 'Caramel Swirl Tumbler',
+    brand: 'Brew Bliss',
+    images: const [
+      'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085',
+      'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb',
+    price: 24.00,
+    attrs: const {
+      'Volume': '450ml',
+      'Material': 'Recycled steel',
+    },
+    description: 'Insulated tumbler inspired by caramel latte art.',
+    category: 'Tumblers',
+    condition: 'New',
+    allowOffers: false,
+    ownerId: null,
+    createdAt: DateTime.now(),
+    tags: const ['insulated', 'travel', 'steel'],
+    priceHistory: const [25.0, 24.0],
+  ),
+  Item(
+    id: 'it_coffee_mug_03',
+    name: 'Mocha Ridge Cup',
+    brand: 'Crestware',
+    images: const [
+      'https://images.unsplash.com/photo-1499636136210-6f4ee915583e',
+      'https://images.unsplash.com/photo-1470337458703-46ad1756a187',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Neptune.glb',
+    price: 12.50,
+    attrs: const {
+      'Volume': '300ml',
+      'Material': 'Stoneware',
+    },
+    description: 'Stackable stoneware cup with ridge grip.',
+    category: 'Mugs',
+    condition: 'Pre-loved',
+    allowOffers: true,
+    ownerId: null,
+    createdAt: DateTime.now(),
+    tags: const ['stoneware', 'stackable'],
+    priceHistory: const [10.0, 11.5, 12.5],
+  ),
+  Item(
+    id: 'it_coffee_press_01',
+    name: 'Nordic Press Kit',
+    brand: 'Aurora Labs',
+    images: const [
+      'https://images.unsplash.com/photo-1511920170033-f8396924c348',
+      'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Car.gltf',
+    price: 58.00,
+    attrs: const {
+      'Size': '600ml',
+      'Material': 'Borosilicate glass',
+    },
+    description: 'A balanced press kit with copper frame and glass beaker.',
+    category: 'Brewers',
+    condition: 'Like new',
+    allowOffers: true,
+    createdAt: DateTime.now(),
+    tags: const ['brewer', 'glass', 'copper'],
+    priceHistory: const [60.0, 58.0],
+  ),
+  Item(
+    id: 'it_coffee_scale_01',
+    name: 'Precision Bean Scale',
+    brand: 'ScaleLab',
+    images: const [
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93',
+      'https://images.unsplash.com/photo-1514448553124-30c0b0857186',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Shopper.glb',
+    price: 79.90,
+    attrs: const {
+      'Accuracy': '0.1g',
+      'Battery': 'USB-C rechargeable',
+    },
+    description: 'Quick tare scale with timer and matte finish.',
+    category: 'Gear',
+    condition: 'New',
+    allowOffers: false,
+    createdAt: DateTime.now(),
+    tags: const ['scale', 'gear'],
+    priceHistory: const [82.0, 79.9],
+  ),
+  Item(
+    id: 'it_coffee_server_01',
+    name: 'Amber Horizon Server',
+    brand: 'Brew Bliss',
+    images: const [
+      'https://images.unsplash.com/photo-1511920170033-f8396924c348',
+      'https://images.unsplash.com/photo-1504674900247-0877df9cc836',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Plant.glb',
+    price: 34.50,
+    attrs: const {
+      'Volume': '600ml',
+      'Material': 'Heat resistant glass',
+    },
+    description: 'Hand-blown server with amber gradient.',
+    category: 'Servers',
+    condition: 'Like new',
+    allowOffers: true,
+    createdAt: DateTime.now(),
+    tags: const ['glass', 'server', 'amber'],
+    priceHistory: const [32.0, 33.5, 34.5],
+  ),
+  Item(
+    id: 'it_coffee_filter_01',
+    name: 'Origami Dripper Set',
+    brand: 'Origami',
+    images: const [
+      'https://images.unsplash.com/photo-1525059696034-4967a8e1dca3',
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+    price: 42.00,
+    attrs: const {
+      'Size': 'Medium',
+      'Material': 'Porcelain',
+    },
+    description: 'Origami dripper with wooden collar and paper filters.',
+    category: 'Brewers',
+    condition: 'New',
+    allowOffers: false,
+    createdAt: DateTime.now(),
+    tags: const ['dripper', 'pour-over'],
+    priceHistory: const [40.0, 42.0],
+  ),
+  Item(
+    id: 'it_coffee_milk_01',
+    name: 'SteamCraft Pitcher',
+    brand: 'SteamCraft',
+    images: const [
+      'https://images.unsplash.com/photo-1521017432531-fbd92d768814',
+      'https://images.unsplash.com/photo-1525059696034-4967a8e1dca3',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Chair.glb',
+    price: 26.90,
+    attrs: const {
+      'Size': '400ml',
+      'Material': 'Stainless steel',
+    },
+    description: 'Latte art pitcher with etched measurement doodles.',
+    category: 'Gear',
+    condition: 'Pre-loved',
+    allowOffers: true,
+    createdAt: DateTime.now(),
+    tags: const ['pitcher', 'latte art'],
+    priceHistory: const [22.0, 24.0, 26.9],
+  ),
+  Item(
+    id: 'it_coffee_bundle_01',
+    name: 'Duotone Starter Kit',
+    brand: 'Brew Bliss',
+    images: const [
+      'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085',
+      'https://images.unsplash.com/photo-1514448553124-30c0b0857186',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Helmet.glb',
+    price: 129.00,
+    attrs: const {
+      'Includes': 'Server, Mug, Filters, Pitcher',
+    },
+    description: 'A curated starter kit to brew like a pro.',
+    category: 'Bundles',
+    condition: 'New',
+    allowOffers: true,
+    createdAt: DateTime.now(),
+    tags: const ['bundle', 'starter', 'kit'],
+    priceHistory: const [129.0],
+  ),
+  Item(
+    id: 'it_coffee_coll_01',
+    name: 'Vintage Roast Mug',
+    brand: 'RetroRoast',
+    images: const [
+      'https://images.unsplash.com/photo-1523944339743-0fe45b05f9c7',
+      'https://images.unsplash.com/photo-1504754524776-8f4f37790ca0',
+    ],
+    model3d: 'https://modelviewer.dev/shared-assets/models/Spacesuit.glb',
+    price: 19.00,
+    attrs: const {
+      'Volume': '320ml',
+      'Material': 'Ceramic',
+    },
+    description: 'Vintage roast mug with limited print doodles.',
+    category: 'Mugs',
+    condition: 'Good',
+    allowOffers: true,
+    createdAt: DateTime.now(),
+    tags: const ['vintage', 'limited', 'collection'],
+    priceHistory: const [18.5, 19.0],
   ),
 ];
 
-final seedOffers = <Offer>[];
+final seedOffers = <Offer>[
+  Offer(
+    id: 'offer_001',
+    itemId: 'it_coffee_mug_01',
+    buyer: 'Amina',
+    amount: 17.5,
+    createdAt: DateTime.now().subtract(const Duration(days: 1)),
+  ),
+];
+
+final seedCollections = <Collection>[
+  Collection(id: 'col_featured', name: 'Featured Mugs', itemIds: const ['it_coffee_mug_01', 'it_coffee_mug_03']),
+];
+
+final seedBundles = <Bundle>[
+  Bundle(
+    id: 'bundle_start',
+    name: 'Starter Warmth Bundle',
+    itemIds: const ['it_coffee_mug_01', 'it_coffee_server_01', 'it_coffee_filter_01'],
+    bundlePrice: 95.0,
+    desc: 'Save with this curated warm-up bundle.',
+  ),
+];
