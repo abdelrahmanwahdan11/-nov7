@@ -6,7 +6,9 @@ import '../../controllers/search_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
+import '../../data/models/saved_filter_adv.dart';
 import '../../widgets/item_card_3d.dart';
+import '../common/advanced_filter_builder.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({
@@ -26,6 +28,8 @@ class _SearchPageState extends State<SearchPage> {
   final _queryController = TextEditingController();
   late final ScrollController _scrollController;
   bool _loading = false;
+  String? _activeAdvancedExpression;
+  String? _activeAdvancedId;
 
   @override
   void initState() {
@@ -51,6 +55,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _onSearch(String value) async {
+    if (_activeAdvancedExpression != null) {
+      setState(() {
+        _activeAdvancedExpression = null;
+        _activeAdvancedId = null;
+      });
+    }
     await widget.searchController.run(value, reset: true);
   }
 
@@ -92,6 +102,117 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  Future<void> _openAdvancedBuilder() async {
+    final loc = AppLocalizations.of(context);
+    String expression = _activeAdvancedExpression ?? '';
+    final nameController = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AdvancedFilterBuilder(
+                      onExpressionChanged: (value) =>
+                          setModalState(() => expression = value),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      decoration:
+                          InputDecoration(labelText: loc.translate('name')),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(loc.translate('cancel')),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: expression.trim().isEmpty ||
+                                  nameController.text.trim().isEmpty
+                              ? null
+                              : () async {
+                                  final filter = SavedFilterAdv(
+                                    id: DateTime.now()
+                                        .microsecondsSinceEpoch
+                                        .toString(),
+                                    name: nameController.text.trim(),
+                                    expression: expression.trim(),
+                                    createdAt: DateTime.now(),
+                                  );
+                                  await widget.searchController
+                                      .saveAdvancedFilter(filter);
+                                  if (!mounted) return;
+                                  Navigator.of(context).pop();
+                                  _applyAdvancedFilter(filter);
+                                },
+                          child: Text(loc.translate('save')),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: expression.trim().isEmpty
+                              ? null
+                              : () {
+                                  Navigator.of(context).pop();
+                                  if (mounted) {
+                                    _applyAdvancedExpression(expression.trim());
+                                  }
+                                },
+                          child: Text(loc.translate('view')),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _applyAdvancedFilter(SavedFilterAdv filter) {
+    setState(() {
+      _activeAdvancedExpression = filter.expression;
+      _activeAdvancedId = filter.id;
+      _queryController.clear();
+    });
+    widget.searchController.runAdvancedExpression(filter.expression, reset: true);
+  }
+
+  void _applyAdvancedExpression(String expression) {
+    setState(() {
+      _activeAdvancedExpression = expression;
+      _activeAdvancedId = null;
+      _queryController.clear();
+    });
+    widget.searchController.runAdvancedExpression(expression, reset: true);
+  }
+
+  void _clearAdvancedExpression() {
+    setState(() {
+      _activeAdvancedExpression = null;
+      _activeAdvancedId = null;
+    });
+    widget.searchController.run('', reset: true);
+  }
+
   @override
   void dispose() {
     _queryController.dispose();
@@ -108,6 +229,13 @@ class _SearchPageState extends State<SearchPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(loc.translate('search')),
+        actions: [
+          IconButton(
+            icon: const Icon(IconlyLight.filter),
+            tooltip: loc.translate('advancedFilters'),
+            onPressed: _openAdvancedBuilder,
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -162,6 +290,41 @@ class _SearchPageState extends State<SearchPage> {
                   onPressed: () => _saveCurrentSearch(context),
                   icon: const Icon(Icons.bookmark_add_outlined),
                   label: Text(loc.translate('saveSearch')),
+                ),
+              ),
+            const SizedBox(height: 8),
+            ValueListenableBuilder<List<SavedFilterAdv>>(
+              valueListenable:
+                  widget.searchController.advancedFiltersListenable,
+              builder: (context, filters, _) {
+                if (filters.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    children: filters
+                        .map(
+                          (filter) => InputChip(
+                            label: Text(filter.name),
+                            selected: _activeAdvancedId == filter.id,
+                            onPressed: () => _applyAdvancedFilter(filter),
+                            onDeleted: () => widget.searchController
+                                .deleteAdvancedFilter(filter.id),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                );
+              },
+            ),
+            if (_activeAdvancedExpression != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: _clearAdvancedExpression,
+                  child: Text(loc.translate('undo')),
                 ),
               ),
             Expanded(

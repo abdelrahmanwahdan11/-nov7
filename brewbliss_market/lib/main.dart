@@ -6,6 +6,7 @@ import 'controllers/auth_controller.dart';
 import 'controllers/items_controller.dart';
 import 'controllers/negotiation_controller.dart';
 import 'controllers/search_controller.dart';
+import 'controllers/alerts_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/app_localizations.dart';
 import 'features/cart/cart_controller.dart';
@@ -26,6 +27,7 @@ import 'features/search/search_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/experiments/experiments_page.dart';
 import 'features/splash/splash_page.dart';
+import 'features/alerts/alerts_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +37,7 @@ Future<void> main() async {
   final cartController = await CartController.init(itemsController);
   final negotiationController = await NegotiationController.init(itemsController);
   final searchController = await SearchController.init(itemsController);
+  final alertsController = await AlertsController.init(itemsController);
   final authController = AuthController();
   runApp(BrewBlissApp(
     appController: appController,
@@ -43,6 +46,7 @@ Future<void> main() async {
     cartController: cartController,
     negotiationController: negotiationController,
     searchController: searchController,
+    alertsController: alertsController,
   ));
 }
 
@@ -55,6 +59,7 @@ class BrewBlissApp extends StatefulWidget {
     required this.cartController,
     required this.negotiationController,
     required this.searchController,
+    required this.alertsController,
   });
 
   final AppController appController;
@@ -63,6 +68,7 @@ class BrewBlissApp extends StatefulWidget {
   final CartController cartController;
   final NegotiationController negotiationController;
   final SearchController searchController;
+  final AlertsController alertsController;
 
   @override
   State<BrewBlissApp> createState() => _BrewBlissAppState();
@@ -146,6 +152,10 @@ class _BrewBlissAppState extends State<BrewBlissApp> {
                     itemsController: widget.itemsController,
                     cartController: widget.cartController,
                   ),
+              '/alerts': (_) => AlertsPage(
+                    alertsController: widget.alertsController,
+                    itemsController: widget.itemsController,
+                  ),
               '/experiments': (_) => ExperimentsPage(appController: widget.appController),
             },
             onGenerateRoute: (settings) {
@@ -158,6 +168,7 @@ class _BrewBlissAppState extends State<BrewBlissApp> {
                     cartController: widget.cartController,
                     negotiationController: widget.negotiationController,
                     appController: widget.appController,
+                    alertsController: widget.alertsController,
                   ),
                 );
               }
@@ -176,6 +187,7 @@ class _BrewBlissAppState extends State<BrewBlissApp> {
     widget.negotiationController.dispose();
     widget.authController.dispose();
     widget.searchController.dispose();
+    widget.alertsController.dispose();
     widget.appController.dispose();
     super.dispose();
   }

@@ -8,6 +8,7 @@ class PriceAlert {
     required this.enabled,
     required this.createdAt,
     this.triggeredAt,
+    this.expiresAt,
   });
 
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
@@ -20,6 +21,9 @@ class PriceAlert {
       triggeredAt: json['triggeredAt'] == null
           ? null
           : DateTime.parse(json['triggeredAt'] as String),
+      expiresAt: json['expiresAt'] == null
+          ? null
+          : DateTime.tryParse(json['expiresAt'] as String),
     );
   }
 
@@ -29,8 +33,13 @@ class PriceAlert {
   final bool enabled;
   final DateTime createdAt;
   final DateTime? triggeredAt;
+  final DateTime? expiresAt;
 
-  PriceAlert copyWith({bool? enabled, DateTime? triggeredAt}) {
+  PriceAlert copyWith({
+    bool? enabled,
+    DateTime? triggeredAt,
+    DateTime? expiresAt,
+  }) {
     return PriceAlert(
       id: id,
       itemId: itemId,
@@ -38,6 +47,7 @@ class PriceAlert {
       enabled: enabled ?? this.enabled,
       createdAt: createdAt,
       triggeredAt: triggeredAt ?? this.triggeredAt,
+      expiresAt: expiresAt ?? this.expiresAt,
     );
   }
 
@@ -49,6 +59,7 @@ class PriceAlert {
       'enabled': enabled,
       'createdAt': createdAt.toIso8601String(),
       'triggeredAt': triggeredAt?.toIso8601String(),
+      'expiresAt': expiresAt?.toIso8601String(),
     };
   }
 

@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/item.dart';
+import '../data/models/saved_filter_adv.dart';
 import '../data/models/saved_search.dart';
 import 'items_controller.dart';
 
 const _savedSearchesKey = 'saved_searches.json';
 const _recentSearchesKey = 'recent.searches';
+const _savedFiltersAdvKey = 'advanced_filters.json';
 
 class SearchController {
   SearchController._(this._prefs, this._itemsController) {
@@ -16,6 +18,8 @@ class SearchController {
     _loadingNotifier = ValueNotifier<bool>(false);
     _savedSearchesNotifier = ValueNotifier<List<SavedSearch>>(<SavedSearch>[]);
     _recentQueriesNotifier = ValueNotifier<List<String>>(<String>[]);
+    _advancedFiltersNotifier =
+        ValueNotifier<List<SavedFilterAdv>>(<SavedFilterAdv>[]);
   }
 
   static Future<SearchController> init(ItemsController itemsController) async {
@@ -32,12 +36,14 @@ class SearchController {
   late final ValueNotifier<bool> _loadingNotifier;
   late final ValueNotifier<List<SavedSearch>> _savedSearchesNotifier;
   late final ValueNotifier<List<String>> _recentQueriesNotifier;
+  late final ValueNotifier<List<SavedFilterAdv>> _advancedFiltersNotifier;
   List<Item> _matched = <Item>[];
   int _page = 0;
   static const int _pageSize = 12;
   String _currentQuery = '';
   SavedSearchFilters _currentFilters = const SavedSearchFilters();
   String _sortMode = 'relevance';
+  Map<String, Set<String>> _invertedIndex = <String, Set<String>>{};
 
   ValueListenable<List<Item>> get resultsListenable => _resultsNotifier;
   ValueListenable<bool> get loadingListenable => _loadingNotifier;
@@ -45,14 +51,34 @@ class SearchController {
       _savedSearchesNotifier;
   ValueListenable<List<String>> get recentQueriesListenable =>
       _recentQueriesNotifier;
+  ValueListenable<List<SavedFilterAdv>> get advancedFiltersListenable =>
+      _advancedFiltersNotifier;
 
   Future<void> _load() async {
     final savedJson = _prefs.getString(_savedSearchesKey);
+    final saved = <SavedSearch>[];
     if (savedJson != null && savedJson.isNotEmpty) {
-      _savedSearchesNotifier.value = SavedSearch.decodeList(savedJson);
+      saved.addAll(SavedSearch.decodeList(savedJson));
+      _savedSearchesNotifier.value = [...saved];
     }
     final recent = _prefs.getStringList(_recentSearchesKey) ?? <String>[];
     _recentQueriesNotifier.value = recent;
+    final advanced = _prefs.getString(_savedFiltersAdvKey);
+    if (advanced != null && advanced.isNotEmpty) {
+      _advancedFiltersNotifier.value = SavedFilterAdv.decodeList(advanced);
+    }
+    if (_advancedFiltersNotifier.value.isEmpty && saved.isNotEmpty) {
+      final migrated = saved
+          .map(_convertSavedSearch)
+          .whereType<SavedFilterAdv>()
+          .toList();
+      if (migrated.isNotEmpty) {
+        _advancedFiltersNotifier.value = migrated;
+        await _prefs
+            .setString(_savedFiltersAdvKey, SavedFilterAdv.encodeList(migrated));
+      }
+    }
+    _rebuildIndex();
   }
 
   Future<void> run(
@@ -68,11 +94,37 @@ class SearchController {
     _currentQuery = query;
     _currentFilters = filters ?? const SavedSearchFilters();
     _sortMode = sortMode;
-    _matched = _applyFilters(_itemsController.search(query));
+    _rebuildIndex();
+    final candidates = _candidatesForQuery(query);
+    final baseResults = _itemsController.search(query);
+    if (candidates != null && candidates.isNotEmpty) {
+      _matched = _applyFilters(
+        baseResults.where((item) => candidates.contains(item.id)).toList(),
+      );
+    } else {
+      _matched = _applyFilters(baseResults);
+    }
     _applySort();
     await _emitPage(reset: reset);
     _loadingNotifier.value = false;
     _trackRecentQuery(query);
+  }
+
+  Future<void> runAdvancedExpression(
+    String expression, {
+    bool reset = true,
+  }) async {
+    _loadingNotifier.value = true;
+    if (reset) {
+      _page = 0;
+    }
+    _currentQuery = expression;
+    _currentFilters = const SavedSearchFilters();
+    _sortMode = 'relevance';
+    _matched = _itemsController.advancedFilter(expression);
+    _applySort();
+    await _emitPage(reset: reset);
+    _loadingNotifier.value = false;
   }
 
   Future<void> fetchNextPage() async {
@@ -176,6 +228,32 @@ class SearchController {
   List<SavedSearch> listSavedSearches() =>
       List<SavedSearch>.unmodifiable(_savedSearchesNotifier.value);
 
+  Future<void> saveAdvancedFilter(SavedFilterAdv filter) async {
+    final filters = [..._advancedFiltersNotifier.value];
+    final index = filters.indexWhere((element) => element.id == filter.id);
+    if (index == -1) {
+      filters.add(filter);
+    } else {
+      filters[index] = filter;
+    }
+    _advancedFiltersNotifier.value = filters;
+    await _prefs.setString(_savedFiltersAdvKey, SavedFilterAdv.encodeList(filters));
+  }
+
+  Future<void> deleteAdvancedFilter(String id) async {
+    final filters =
+        _advancedFiltersNotifier.value.where((element) => element.id != id).toList();
+    _advancedFiltersNotifier.value = filters;
+    await _prefs.setString(_savedFiltersAdvKey, SavedFilterAdv.encodeList(filters));
+  }
+
+  List<SavedFilterAdv> listAdvancedFilters() =>
+      List<SavedFilterAdv>.unmodifiable(_advancedFiltersNotifier.value);
+
+  Future<void> runSavedAdvancedFilter(SavedFilterAdv filter) async {
+    await runAdvancedExpression(filter.expression, reset: true);
+  }
+
   void _trackRecentQuery(String query) {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
@@ -194,5 +272,80 @@ class SearchController {
     _loadingNotifier.dispose();
     _savedSearchesNotifier.dispose();
     _recentQueriesNotifier.dispose();
+    _advancedFiltersNotifier.dispose();
+  }
+
+  SavedFilterAdv? _convertSavedSearch(SavedSearch search) {
+    final clauses = <String>[];
+    final query = search.query.trim();
+    if (query.isNotEmpty) {
+      final escaped = _escape(query);
+      clauses.add(
+          '(name~"$escaped" OR description~"$escaped" OR tags~"$escaped")');
+    }
+    final filters = search.filters;
+    if (filters.category != null && filters.category!.isNotEmpty) {
+      clauses.add('category=="${_escape(filters.category!)}"');
+    }
+    if (filters.minPrice != null) {
+      clauses.add('price>=${filters.minPrice}');
+    }
+    if (filters.maxPrice != null) {
+      clauses.add('price<=${filters.maxPrice}');
+    }
+    if (filters.condition != null && filters.condition!.isNotEmpty) {
+      clauses.add('condition=="${_escape(filters.condition!)}"');
+    }
+    if (filters.allowOffers != null) {
+      clauses.add('allowOffers==${filters.allowOffers}');
+    }
+    if (clauses.isEmpty) {
+      return null;
+    }
+    final expression = clauses.join(' AND ');
+    return SavedFilterAdv(
+      id: 'legacy_${search.id}',
+      name: search.name,
+      expression: expression,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  String _escape(String input) {
+    return input.replaceAll('"', '\\"');
+  }
+
+  void _rebuildIndex() {
+    final Map<String, Set<String>> index = <String, Set<String>>{};
+    for (final item in _itemsController.allItems) {
+      final tokens = <String>{
+        ...item.name.toLowerCase().split(RegExp(r'[\s,]+')),
+        ...item.description.toLowerCase().split(RegExp(r'[\s,]+')),
+        ...item.tags.map((tag) => tag.toLowerCase()),
+      }..removeWhere((token) => token.isEmpty);
+      for (final token in tokens) {
+        index.update(token, (set) => set..add(item.id), ifAbsent: () => {item.id});
+      }
+    }
+    _invertedIndex = index;
+  }
+
+  Set<String>? _candidatesForQuery(String query) {
+    final terms = query
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((term) => term.isNotEmpty)
+        .toList();
+    if (terms.isEmpty) {
+      return null;
+    }
+    final Set<String> combined = <String>{};
+    for (final term in terms) {
+      final matches = _invertedIndex[term];
+      if (matches != null) {
+        combined.addAll(matches);
+      }
+    }
+    return combined.isEmpty ? null : combined;
   }
 }

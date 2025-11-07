@@ -6,12 +6,14 @@ import '../../controllers/search_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
+import '../../data/models/saved_filter_adv.dart';
 import '../../data/models/saved_search.dart';
 import '../../widgets/filter_chips.dart';
 import '../../widgets/item_card_3d.dart';
 import '../../widgets/skeleton_box.dart';
 import '../cart/cart_controller.dart';
 import '../cart/widgets/cart_icon_badge.dart';
+import '../common/advanced_filter_builder.dart';
 import 'widgets/saved_filters_row.dart';
 import 'widgets/sticky_filter_bar.dart';
 import 'widgets/tag_bar.dart';
@@ -42,6 +44,8 @@ class _CatalogPageState extends State<CatalogPage> {
   String? _activeTag;
   SavedSearchFilters? _activeSavedFilters;
   String? _activeSavedId;
+  String? _activeAdvancedExpression;
+  String? _activeAdvancedId;
 
   @override
   void initState() {
@@ -73,6 +77,8 @@ class _CatalogPageState extends State<CatalogPage> {
       if (saved.filters.category != null && saved.filters.category!.isNotEmpty) {
         _selectedFilters.add(saved.filters.category!);
       }
+      _activeAdvancedExpression = null;
+      _activeAdvancedId = null;
     });
   }
 
@@ -86,6 +92,121 @@ class _CatalogPageState extends State<CatalogPage> {
     }
   }
 
+  void _applyAdvancedFilter(SavedFilterAdv filter) {
+    setState(() {
+      _activeAdvancedExpression = filter.expression;
+      _activeAdvancedId = filter.id;
+      _activeSavedFilters = null;
+      _activeSavedId = null;
+      _searchController.clear();
+      _selectedFilters.clear();
+    });
+  }
+
+  void _applyAdvancedExpression(String expression) {
+    setState(() {
+      _activeAdvancedExpression = expression;
+      _activeAdvancedId = null;
+      _activeSavedFilters = null;
+      _activeSavedId = null;
+      _selectedFilters.clear();
+      _searchController.clear();
+    });
+  }
+
+  void _clearAdvancedFilter() {
+    setState(() {
+      _activeAdvancedExpression = null;
+      _activeAdvancedId = null;
+    });
+  }
+
+  Future<void> _openAdvancedBuilder() async {
+    final loc = AppLocalizations.of(context);
+    String expression = _activeAdvancedExpression ?? '';
+    final nameController = TextEditingController();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AdvancedFilterBuilder(
+                      onExpressionChanged: (value) =>
+                          setModalState(() => expression = value),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: loc.translate('name'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(loc.translate('cancel')),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: expression.trim().isEmpty ||
+                                  nameController.text.trim().isEmpty
+                              ? null
+                              : () async {
+                                  final filter = SavedFilterAdv(
+                                    id: DateTime.now()
+                                        .microsecondsSinceEpoch
+                                        .toString(),
+                                    name: nameController.text.trim(),
+                                    expression: expression.trim(),
+                                    createdAt: DateTime.now(),
+                                  );
+                                  await widget.searchController
+                                      .saveAdvancedFilter(filter);
+                                  if (!mounted) return;
+                                  Navigator.of(context).pop();
+                                  _applyAdvancedFilter(filter);
+                                },
+                          child: Text(loc.translate('save')),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: expression.trim().isEmpty
+                              ? null
+                              : () {
+                                  Navigator.of(context).pop();
+                                  if (mounted) {
+                                    _applyAdvancedExpression(expression.trim());
+                                  }
+                                },
+                          child: Text(loc.translate('view')),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -95,7 +216,19 @@ class _CatalogPageState extends State<CatalogPage> {
     super.dispose();
   }
 
-  List<Item> _applyFilters(List<Item> items) {
+  List<Item> _filteredItems(List<Item> items) {
+    final source = _activeAdvancedExpression != null &&
+            _activeAdvancedExpression!.isNotEmpty
+        ? widget.itemsController.advancedFilter(_activeAdvancedExpression!)
+        : items;
+    final applied = _applyStandardFilters(source);
+    if (_activeTag == null) {
+      return applied;
+    }
+    return applied.where((item) => item.tags.contains(_activeTag)).toList();
+  }
+
+  List<Item> _applyStandardFilters(List<Item> items) {
     final query = _searchController.text.trim().toLowerCase();
     return items.where((item) {
       final matchesQuery = query.isEmpty ||
@@ -104,7 +237,6 @@ class _CatalogPageState extends State<CatalogPage> {
           item.category.toLowerCase().contains(query) ||
           item.condition.toLowerCase().contains(query);
       final matchesFilter = _selectedFilters.isEmpty || _selectedFilters.contains(item.category);
-      final matchesTag = _activeTag == null || item.tags.contains(_activeTag);
       final saved = _activeSavedFilters;
       final matchesSavedCategory = saved?.category == null || saved!.category!.isEmpty
           ? true
@@ -118,7 +250,6 @@ class _CatalogPageState extends State<CatalogPage> {
       final matchesOffers = saved?.allowOffers == null || item.allowOffers == saved!.allowOffers;
       return matchesQuery &&
           matchesFilter &&
-          matchesTag &&
           matchesSavedCategory &&
           matchesMin &&
           matchesMax &&
@@ -147,6 +278,11 @@ class _CatalogPageState extends State<CatalogPage> {
             cartController: widget.cartController,
             onPressed: () => Navigator.of(context).pushNamed('/cart'),
           ),
+          IconButton(
+            tooltip: loc.translate('advancedFilters'),
+            onPressed: _openAdvancedBuilder,
+            icon: const Icon(IconlyLight.filter),
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -154,8 +290,12 @@ class _CatalogPageState extends State<CatalogPage> {
         child: ValueListenableBuilder<List<Item>>(
           valueListenable: widget.itemsController.visibleItemsListenable,
           builder: (context, items, _) {
-            final tags = _availableTags(items);
-            final filtered = _applyFilters(items);
+            final filtered = _filteredItems(items);
+            final tags = _availableTags(
+                _activeAdvancedExpression != null &&
+                        _activeAdvancedExpression!.isNotEmpty
+                    ? filtered
+                    : items);
             return CustomScrollView(
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
@@ -178,6 +318,8 @@ class _CatalogPageState extends State<CatalogPage> {
                           onChanged: (_) => setState(() {
                                 _activeSavedFilters = null;
                                 _activeSavedId = null;
+                                _activeAdvancedExpression = null;
+                                _activeAdvancedId = null;
                               }),
                         ),
                         const SizedBox(height: 12),
@@ -204,6 +346,42 @@ class _CatalogPageState extends State<CatalogPage> {
                             );
                           },
                         ),
+                        const SizedBox(height: 8),
+                        ValueListenableBuilder<List<SavedFilterAdv>>(
+                          valueListenable:
+                              widget.searchController.advancedFiltersListenable,
+                          builder: (context, filters, __) {
+                            if (filters.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return SizedBox(
+                              height: 44,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: filters.length,
+                                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                itemBuilder: (context, index) {
+                                  final filter = filters[index];
+                                  return InputChip(
+                                    label: Text(filter.name),
+                                    selected: _activeAdvancedId == filter.id,
+                                    onPressed: () => _applyAdvancedFilter(filter),
+                                    onDeleted: () => widget.searchController
+                                        .deleteAdvancedFilter(filter.id),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                        if (_activeAdvancedExpression != null)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: _clearAdvancedFilter,
+                              child: Text(loc.translate('undo')),
+                            ),
+                          ),
                       ],
                     ),
                   ),

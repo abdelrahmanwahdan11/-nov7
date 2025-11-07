@@ -23,6 +23,9 @@ class Item {
     this.priceHistory = const <double>[],
     this.variants,
     this.variantSelectedId,
+    this.draft = false,
+    this.tagsSuggested = const <String>[],
+    this.bundleId,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -50,6 +53,11 @@ class Item {
           ?.map((variant) => Variant.fromJson(variant as Map<String, dynamic>))
           .toList(),
       variantSelectedId: json['variantSelectedId'] as String?,
+      draft: json['draft'] as bool? ?? false,
+      tagsSuggested:
+          (json['tagsSuggested'] as List<dynamic>?)?.map((e) => '$e').toList() ??
+              const <String>[],
+      bundleId: json['bundleId'] as String?,
     );
   }
 
@@ -72,6 +80,9 @@ class Item {
   final List<double> priceHistory;
   final List<Variant>? variants;
   final String? variantSelectedId;
+  final bool draft;
+  final List<String> tagsSuggested;
+  final String? bundleId;
 
   Map<String, dynamic> toJson() {
     return {
@@ -94,6 +105,9 @@ class Item {
       'priceHistory': priceHistory,
       'variants': variants?.map((variant) => variant.toJson()).toList(),
       'variantSelectedId': variantSelectedId,
+      'draft': draft,
+      'tagsSuggested': tagsSuggested,
+      'bundleId': bundleId,
     };
   }
 
@@ -116,6 +130,9 @@ class Item {
     List<double>? priceHistory,
     List<Variant>? variants,
     String? variantSelectedId,
+    bool? draft,
+    List<String>? tagsSuggested,
+    String? bundleId,
   }) {
     return Item(
       id: id,
@@ -137,6 +154,9 @@ class Item {
       priceHistory: priceHistory ?? this.priceHistory,
       variants: variants ?? this.variants,
       variantSelectedId: variantSelectedId ?? this.variantSelectedId,
+      draft: draft ?? this.draft,
+      tagsSuggested: tagsSuggested ?? this.tagsSuggested,
+      bundleId: bundleId ?? this.bundleId,
     );
   }
 

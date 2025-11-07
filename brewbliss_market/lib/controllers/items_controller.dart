@@ -10,10 +10,12 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/local/sample_data.dart';
+import '../data/models/bundle.dart';
 import '../data/models/collection.dart';
 import '../data/models/item.dart';
 import '../data/models/offer.dart';
 import '../data/models/review.dart';
+import '../data/models/undo_entry.dart';
 import '../data/models/variant.dart';
 
 const _itemsKey = 'items.json';
@@ -26,6 +28,8 @@ const _reviewsKey = 'reviews.json';
 const _priceHistoryKey = 'price_history.json';
 const _variantSelectionKey = 'variant.selection';
 const _metricsKey = 'interaction.metrics';
+const _bundlesKey = 'bundles.json';
+const _undoStackKey = 'undo_stack.json';
 
 class ItemsController {
   ItemsController._(this._prefs) {
@@ -36,6 +40,8 @@ class ItemsController {
     _wishlistNotifier = ValueNotifier<Set<String>>({});
     _collectionsNotifier = ValueNotifier<List<Collection>>([]);
     _reviewsNotifier = ValueNotifier<Map<String, List<Review>>>({});
+    _bundlesNotifier = ValueNotifier<List<Bundle>>([]);
+    _undoStackNotifier = ValueNotifier<List<UndoEntry>>([]);
     _itemsStreamController = StreamController<List<Item>>.broadcast();
     _favoritesStreamController = StreamController<Set<String>>.broadcast();
     _compareStreamController = StreamController<Set<String>>.broadcast();
@@ -58,6 +64,8 @@ class ItemsController {
   late final ValueNotifier<Set<String>> _wishlistNotifier;
   late final ValueNotifier<List<Collection>> _collectionsNotifier;
   late final ValueNotifier<Map<String, List<Review>>> _reviewsNotifier;
+  late final ValueNotifier<List<Bundle>> _bundlesNotifier;
+  late final ValueNotifier<List<UndoEntry>> _undoStackNotifier;
   late final StreamController<List<Item>> _itemsStreamController;
   late final StreamController<Set<String>> _favoritesStreamController;
   late final StreamController<Set<String>> _compareStreamController;
@@ -74,6 +82,8 @@ class ItemsController {
   Map<String, String?> _variantSelections = <String, String?>{};
   Map<String, _InteractionSnapshot> _interactionMetrics =
       <String, _InteractionSnapshot>{};
+  List<Bundle> _bundles = <Bundle>[];
+  List<UndoEntry> _undoStack = <UndoEntry>[];
 
   ValueListenable<List<Item>> get visibleItemsListenable => _visibleItemsNotifier;
   ValueListenable<Set<String>> get favoritesListenable => _favoritesNotifier;
@@ -82,6 +92,8 @@ class ItemsController {
   ValueListenable<Set<String>> get wishlistListenable => _wishlistNotifier;
   ValueListenable<List<Collection>> get collectionsListenable => _collectionsNotifier;
   ValueListenable<Map<String, List<Review>>> get reviewsListenable => _reviewsNotifier;
+  ValueListenable<List<Bundle>> get bundlesListenable => _bundlesNotifier;
+  ValueListenable<List<UndoEntry>> get undoListenable => _undoStackNotifier;
 
   Stream<List<Item>> get itemsStream => _itemsStreamController.stream;
   Stream<Set<String>> get favoritesStream => _favoritesStreamController.stream;
@@ -90,6 +102,9 @@ class ItemsController {
   Stream<List<Collection>> get collectionsStream => _collectionsStreamController.stream;
 
   List<Collection> get collections => List<Collection>.unmodifiable(_collectionsNotifier.value);
+  List<Bundle> get bundles => List<Bundle>.unmodifiable(_bundles);
+  List<UndoEntry> get undoEntries => List<UndoEntry>.unmodifiable(_undoStack);
+  List<Item> get allItems => List<Item>.unmodifiable(_allItems);
 
   Future<void> _load() async {
     final itemsJson = _prefs.getString(_itemsKey);
@@ -111,6 +126,17 @@ class ItemsController {
     final collections = collectionsJson == null || collectionsJson.isEmpty
         ? <Collection>[]
         : Collection.decodeList(collectionsJson);
+    final bundlesJson = _prefs.getString(_bundlesKey);
+    _bundles = bundlesJson == null || bundlesJson.isEmpty
+        ? <Bundle>[]
+        : Bundle.decodeList(bundlesJson);
+    _bundlesNotifier.value = [..._bundles];
+
+    final undoJson = _prefs.getString(_undoStackKey);
+    _undoStack = undoJson == null || undoJson.isEmpty
+        ? <UndoEntry>[]
+        : UndoEntry.decodeList(undoJson);
+    _undoStackNotifier.value = [..._undoStack];
 
     final reviewsJson = _prefs.getString(_reviewsKey);
     final Map<String, List<Review>> reviews = {};
@@ -184,13 +210,26 @@ class ItemsController {
           ? (item.ratingAvg == 0 ? 0.0 : item.ratingAvg)
           : itemReviews.fold<double>(0, (acc, r) => acc + r.stars) / ratingCount;
       final selection = _resolveInitialVariantSelection(item);
+      final suggestedTags = _smartTagSuggestions(item);
+      String? bundleId = item.bundleId;
+      if (bundleId == null ||
+          !_bundles.any((bundle) => bundle.id == bundleId && bundle.itemIds.contains(item.id))) {
+        for (final bundle in _bundles) {
+          if (bundle.itemIds.contains(item.id)) {
+            bundleId = bundle.id;
+            break;
+          }
+        }
+      }
       return item.copyWith(
         priceHistory: history,
         ratingCount: ratingCount,
         ratingAvg: double.parse(ratingAvg.toStringAsFixed(2)),
         tags: item.tags.isEmpty ? _deriveTags(item) : item.tags,
+        tagsSuggested: suggestedTags,
         variants: item.variants,
         variantSelectedId: selection,
+        bundleId: bundleId,
       );
     }).toList();
 
@@ -263,9 +302,13 @@ class ItemsController {
         : item.price != null
             ? <double>[item.price!]
             : _priceHistory[item.id] ?? <double>[];
+    final suggested = item.tagsSuggested.isEmpty
+        ? _smartTagSuggestions(item)
+        : item.tagsSuggested;
     final normalizedItem = item.copyWith(
       tags: normalizedTags,
       priceHistory: normalizedHistory,
+      tagsSuggested: suggested,
     );
     _priceHistory[normalizedItem.id] = [...normalizedHistory];
     final index = _allItems.indexWhere((e) => e.id == normalizedItem.id);
@@ -339,6 +382,159 @@ class ItemsController {
       }
     }
     return base;
+  }
+
+  Future<void> setDraft(String itemId, bool draft) async {
+    final index = _allItems.indexWhere((element) => element.id == itemId);
+    if (index == -1) return;
+    final updated = _allItems[index].copyWith(draft: draft);
+    _allItems[index] = updated;
+    await _persistItems();
+    _refreshVisibleItem(updated);
+  }
+
+  List<String> suggestedTagsFor(String itemId) {
+    final item = getById(itemId);
+    if (item == null) {
+      return const <String>[];
+    }
+    return item.tagsSuggested;
+  }
+
+  List<String> smartTags(Item item) => _smartTagSuggestions(item);
+
+  Future<Bundle> createBundle({
+    required String name,
+    required List<String> itemIds,
+    required double price,
+    String? description,
+  }) async {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final bundle = Bundle(
+      id: id,
+      name: name,
+      itemIds: itemIds,
+      bundlePrice: double.parse(price.toStringAsFixed(2)),
+      desc: description,
+      createdAt: DateTime.now(),
+    );
+    _bundles = [bundle, ..._bundles];
+    _bundlesNotifier.value = [..._bundles];
+    await _persistBundles();
+    for (final itemId in itemIds) {
+      await assignItemToBundle(itemId, id);
+    }
+    return bundle;
+  }
+
+  Future<void> updateBundle(Bundle bundle) async {
+    final index = _bundles.indexWhere((element) => element.id == bundle.id);
+    if (index == -1) return;
+    _bundles[index] = bundle;
+    _bundlesNotifier.value = [..._bundles];
+    await _persistBundles();
+    final affectedIds = <String>{...bundle.itemIds};
+    for (final item in _allItems) {
+      if (item.bundleId == bundle.id && !affectedIds.contains(item.id)) {
+        await assignItemToBundle(item.id, null);
+      }
+    }
+    for (final id in bundle.itemIds) {
+      await assignItemToBundle(id, bundle.id);
+    }
+  }
+
+  Future<void> deleteBundle(String id) async {
+    _bundles = _bundles.where((bundle) => bundle.id != id).toList();
+    _bundlesNotifier.value = [..._bundles];
+    await _persistBundles();
+    for (var i = 0; i < _allItems.length; i++) {
+      if (_allItems[i].bundleId == id) {
+        final updated = _allItems[i].copyWith(bundleId: null);
+        _allItems[i] = updated;
+        _refreshVisibleItem(updated);
+      }
+    }
+    await _persistItems();
+  }
+
+  List<Item> itemsForBundle(String id) {
+    return _allItems.where((item) => item.bundleId == id).toList();
+  }
+
+  Future<void> assignItemToBundle(String itemId, String? bundleId) async {
+    final index = _allItems.indexWhere((element) => element.id == itemId);
+    if (index == -1) return;
+    final updated = _allItems[index].copyWith(bundleId: bundleId);
+    _allItems[index] = updated;
+    await _persistItems();
+    _refreshVisibleItem(updated);
+  }
+
+  List<Item> advancedFilter(String expression) {
+    final parser = _FilterParser(expression);
+    return _allItems.where(parser.evaluate).toList();
+  }
+
+  bool validate3D(String? url) {
+    if (url == null || url.isEmpty) {
+      return false;
+    }
+    final lower = url.toLowerCase();
+    if (!(lower.endsWith('.glb') || lower.endsWith('.gltf'))) {
+      return false;
+    }
+    final hasScheme = lower.startsWith('http://') || lower.startsWith('https://');
+    return hasScheme;
+  }
+
+  Future<void> pushUndo(UndoEntry entry) async {
+    _undoStack.insert(0, entry);
+    if (_undoStack.length > 20) {
+      _undoStack.removeRange(20, _undoStack.length);
+    }
+    _undoStackNotifier.value = [..._undoStack];
+    await _persistUndoStack();
+  }
+
+  Future<bool> applyUndo(UndoEntry entry) async {
+    bool applied = false;
+    switch (entry.action) {
+      case 'item.restore':
+        final data = entry.payload['item'];
+        if (data is Map<String, dynamic>) {
+          final restored = Item.fromJson(Map<String, dynamic>.from(data));
+          await addOrUpdateItem(restored);
+          applied = true;
+        }
+        break;
+      case 'bundle.restore':
+        final data = entry.payload['bundle'];
+        if (data is Map<String, dynamic>) {
+          final bundle = Bundle.fromJson(Map<String, dynamic>.from(data));
+          final exists = _bundles.any((element) => element.id == bundle.id);
+          if (exists) {
+            await updateBundle(bundle);
+          } else {
+            _bundles = [bundle, ..._bundles];
+            _bundlesNotifier.value = [..._bundles];
+            await _persistBundles();
+            for (final id in bundle.itemIds) {
+              await assignItemToBundle(id, bundle.id);
+            }
+          }
+          applied = true;
+        }
+        break;
+      default:
+        break;
+    }
+    if (applied) {
+      _undoStack.removeWhere((element) => element.id == entry.id);
+      _undoStackNotifier.value = [..._undoStack];
+      await _persistUndoStack();
+    }
+    return applied;
   }
 
   List<Item> recommenderV2({int count = 10}) {
@@ -661,6 +857,8 @@ class ItemsController {
     _wishlistNotifier.dispose();
     _collectionsNotifier.dispose();
     _reviewsNotifier.dispose();
+    _bundlesNotifier.dispose();
+    _undoStackNotifier.dispose();
     _itemsStreamController.close();
     _favoritesStreamController.close();
     _compareStreamController.close();
@@ -767,6 +965,13 @@ class ItemsController {
     );
   }
 
+  Future<void> _persistBundles() async {
+    await _prefs.setString(
+      _bundlesKey,
+      Bundle.encodeList(_bundles),
+    );
+  }
+
   Future<void> _persistReviews() async {
     final map = _reviewsNotifier.value.map((key, value) => MapEntry(
         key, value.map((review) => review.toJson()).toList()));
@@ -775,6 +980,13 @@ class ItemsController {
 
   Future<void> _persistPriceHistory() async {
     await _prefs.setString(_priceHistoryKey, jsonEncode(_priceHistory));
+  }
+
+  Future<void> _persistUndoStack() async {
+    await _prefs.setString(
+      _undoStackKey,
+      UndoEntry.encodeList(_undoStack),
+    );
   }
 
   Future<void> _updateRatingForItem(String itemId, List<Review> reviews) async {
@@ -805,6 +1017,29 @@ class ItemsController {
     next[index] = updated;
     _visibleItemsNotifier.value = next;
     _itemsStreamController.add(next);
+  }
+
+  List<String> _smartTagSuggestions(Item item) {
+    final tags = <String>{..._deriveTags(item)};
+    final lowerDesc = item.description.toLowerCase();
+    if (lowerDesc.contains('limited')) {
+      tags.add('Limited Edition');
+    }
+    if (item.allowOffers) {
+      tags.add('Negotiable');
+    }
+    if (item.price != null && item.price! <= 20) {
+      tags.add('Budget');
+    } else if (item.price != null && item.price! >= 80) {
+      tags.add('Premium');
+    }
+    if (item.attrs.containsKey('Material')) {
+      tags.add(item.attrs['Material']!);
+    }
+    if (item.attrs.containsKey('Volume')) {
+      tags.add(item.attrs['Volume']!);
+    }
+    return tags.map((tag) => tag.trim()).where((tag) => tag.isNotEmpty).take(15).toList();
   }
 
   List<String> _deriveTags(Item item) {
@@ -900,4 +1135,300 @@ class _ScoredItem {
 
   final Item item;
   final double score;
+}
+
+class _FilterParser {
+  _FilterParser(String expression) : _tokens = _tokenize(expression) {
+    _root = _Parser(List<_Token>.from(_tokens)).parse();
+  }
+
+  final List<_Token> _tokens;
+  late final _Node? _root;
+
+  bool evaluate(Item item) {
+    if (_tokens.isEmpty) {
+      return true;
+    }
+    return _root?.evaluate(item) ?? true;
+  }
+
+  static List<_Token> _tokenize(String expression) {
+    final tokens = <_Token>[];
+    final pattern = RegExp(r'(>=|<=|==|!=|~|>|<|\(|\))|"([^"]*)"|([A-Za-z0-9_\.]+)');
+    final matches = pattern.allMatches(expression);
+    for (final match in matches) {
+      final operatorMatch = match.group(1);
+      final quoted = match.group(2);
+      final word = match.group(3);
+      if (operatorMatch != null) {
+        if (operatorMatch == '(') {
+          tokens.add(const _Token(_TokenType.lParen, '('));
+        } else if (operatorMatch == ')') {
+          tokens.add(const _Token(_TokenType.rParen, ')'));
+        } else {
+          tokens.add(_Token(_TokenType.operatorToken, operatorMatch));
+        }
+      } else if (quoted != null) {
+        tokens.add(_Token(_TokenType.stringLiteral, quoted));
+      } else if (word != null) {
+        final lower = word.toLowerCase();
+        if (lower == 'and') {
+          tokens.add(const _Token(_TokenType.and, 'AND'));
+        } else if (lower == 'or') {
+          tokens.add(const _Token(_TokenType.or, 'OR'));
+        } else if (lower == 'true' || lower == 'false') {
+          tokens.add(_Token(_TokenType.booleanLiteral, lower));
+        } else if (double.tryParse(word) != null) {
+          tokens.add(_Token(_TokenType.numberLiteral, word));
+        } else {
+          tokens.add(_Token(_TokenType.identifier, word));
+        }
+      }
+    }
+    return tokens;
+  }
+}
+
+class _Parser {
+  _Parser(this._tokens);
+
+  final List<_Token> _tokens;
+  int _index = 0;
+
+  _Node? parse() {
+    if (_tokens.isEmpty) return null;
+    final node = _parseExpression();
+    return node;
+  }
+
+  _Node? _parseExpression() {
+    var node = _parseTerm();
+    while (_match(_TokenType.or)) {
+      final right = _parseTerm();
+      if (node != null && right != null) {
+        node = _LogicalNode(node, right, isAnd: false);
+      }
+    }
+    return node;
+  }
+
+  _Node? _parseTerm() {
+    var node = _parseFactor();
+    while (_match(_TokenType.and)) {
+      final right = _parseFactor();
+      if (node != null && right != null) {
+        node = _LogicalNode(node, right, isAnd: true);
+      }
+    }
+    return node;
+  }
+
+  _Node? _parseFactor() {
+    if (_match(_TokenType.lParen)) {
+      final expr = _parseExpression();
+      _match(_TokenType.rParen);
+      return expr;
+    }
+    return _parseComparison();
+  }
+
+  _Node? _parseComparison() {
+    final identifierToken = _consume(_TokenType.identifier);
+    if (identifierToken == null) {
+      return null;
+    }
+    final operatorToken = _consume(_TokenType.operatorToken);
+    if (operatorToken == null) {
+      return null;
+    }
+    final valueToken = _consumeValue();
+    if (valueToken == null) {
+      return null;
+    }
+    return _ComparisonNode(
+      field: identifierToken.value,
+      operator: operatorToken.value,
+      value: valueToken,
+    );
+  }
+
+  _Token? _consumeValue() {
+    if (_peekType(_TokenType.stringLiteral)) {
+      return _consume(_TokenType.stringLiteral);
+    }
+    if (_peekType(_TokenType.numberLiteral)) {
+      return _consume(_TokenType.numberLiteral);
+    }
+    if (_peekType(_TokenType.booleanLiteral)) {
+      return _consume(_TokenType.booleanLiteral);
+    }
+    if (_peekType(_TokenType.identifier)) {
+      return _consume(_TokenType.identifier);
+    }
+    return null;
+  }
+
+  bool _match(_TokenType type) {
+    if (_peekType(type)) {
+      _index++;
+      return true;
+    }
+    return false;
+  }
+
+  _Token? _consume(_TokenType type) {
+    if (_peekType(type)) {
+      return _tokens[_index++];
+    }
+    return null;
+  }
+
+  bool _peekType(_TokenType type) {
+    if (_index >= _tokens.length) {
+      return false;
+    }
+    return _tokens[_index].type == type;
+  }
+}
+
+abstract class _Node {
+  bool evaluate(Item item);
+}
+
+class _LogicalNode extends _Node {
+  _LogicalNode(this.left, this.right, {required this.isAnd});
+
+  final _Node left;
+  final _Node right;
+  final bool isAnd;
+
+  @override
+  bool evaluate(Item item) {
+    if (isAnd) {
+      return left.evaluate(item) && right.evaluate(item);
+    }
+    return left.evaluate(item) || right.evaluate(item);
+  }
+}
+
+class _ComparisonNode extends _Node {
+  _ComparisonNode({required this.field, required this.operator, required this.value});
+
+  final String field;
+  final String operator;
+  final _Token value;
+
+  @override
+  bool evaluate(Item item) {
+    final resolved = _resolveField(item, field);
+    final comparisonValue = _coerceValue(value);
+    switch (operator) {
+      case '==':
+        return resolved == comparisonValue;
+      case '!=':
+        return resolved != comparisonValue;
+      case '>':
+        if (resolved is num && comparisonValue is num) {
+          return resolved > comparisonValue;
+        }
+        return false;
+      case '<':
+        if (resolved is num && comparisonValue is num) {
+          return resolved < comparisonValue;
+        }
+        return false;
+      case '>=':
+        if (resolved is num && comparisonValue is num) {
+          return resolved >= comparisonValue;
+        }
+        return false;
+      case '<=':
+        if (resolved is num && comparisonValue is num) {
+          return resolved <= comparisonValue;
+        }
+        return false;
+      case '~':
+        final haystack = _stringSetForField(item, field);
+        if (haystack == null) return false;
+        final needle = '${comparisonValue ?? ''}'.toLowerCase();
+        return haystack.any((element) => element.contains(needle));
+      default:
+        return false;
+    }
+  }
+
+  dynamic _coerceValue(_Token token) {
+    switch (token.type) {
+      case _TokenType.stringLiteral:
+        return token.value;
+      case _TokenType.numberLiteral:
+        return double.tryParse(token.value) ?? double.nan;
+      case _TokenType.booleanLiteral:
+        return token.value == 'true';
+      default:
+        return token.value;
+    }
+  }
+
+  static dynamic _resolveField(Item item, String field) {
+    switch (field) {
+      case 'category':
+        return item.category;
+      case 'price':
+        return item.price;
+      case 'condition':
+        return item.condition;
+      case 'allowOffers':
+        return item.allowOffers;
+      case 'brand':
+        return item.brand;
+      case 'draft':
+        return item.draft;
+      default:
+        if (item.attrs.containsKey(field)) {
+          return item.attrs[field];
+        }
+        return item.tags.firstWhere(
+          (tag) => tag.toLowerCase() == field.toLowerCase(),
+          orElse: () => field,
+        );
+    }
+  }
+
+  static Iterable<String>? _stringSetForField(Item item, String field) {
+    switch (field) {
+      case 'name':
+        return <String>[item.name.toLowerCase()];
+      case 'description':
+        return <String>[item.description.toLowerCase()];
+      case 'tags':
+        return item.tags.map((tag) => tag.toLowerCase());
+      case 'tagsSuggested':
+        return item.tagsSuggested.map((tag) => tag.toLowerCase());
+      default:
+        if (item.attrs.containsKey(field)) {
+          return <String>[item.attrs[field]!.toLowerCase()];
+        }
+        return null;
+    }
+  }
+}
+
+enum _TokenType {
+  identifier,
+  operatorToken,
+  stringLiteral,
+  numberLiteral,
+  booleanLiteral,
+  and,
+  or,
+  lParen,
+  rParen,
+}
+
+class _Token {
+  const _Token(this.type, this.value);
+
+  final _TokenType type;
+  final String value;
 }

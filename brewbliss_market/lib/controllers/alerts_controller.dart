@@ -12,6 +12,8 @@ class AlertsController {
   AlertsController._(this._prefs, this._itemsController) {
     _alertsNotifier = ValueNotifier<List<PriceAlert>>(<PriceAlert>[]);
     _badgeNotifier = ValueNotifier<int>(0);
+    _countdownNotifier = ValueNotifier<Map<String, Duration>>(<String, Duration>{});
+    _badgeBucketsNotifier = ValueNotifier<Map<String, int>>(<String, int>{});
   }
 
   static Future<AlertsController> init(ItemsController itemsController) async {
@@ -27,10 +29,17 @@ class AlertsController {
 
   late final ValueNotifier<List<PriceAlert>> _alertsNotifier;
   late final ValueNotifier<int> _badgeNotifier;
+  late final ValueNotifier<Map<String, Duration>> _countdownNotifier;
+  late final ValueNotifier<Map<String, int>> _badgeBucketsNotifier;
   Timer? _timer;
+  int _tickCounter = 0;
 
   ValueListenable<List<PriceAlert>> get alertsListenable => _alertsNotifier;
   ValueListenable<int> get badgeListenable => _badgeNotifier;
+  ValueListenable<Map<String, Duration>> get countdownsListenable =>
+      _countdownNotifier;
+  ValueListenable<Map<String, int>> get badgeBucketsListenable =>
+      _badgeBucketsNotifier;
 
   Future<void> _load() async {
     final json = _prefs.getString(_alertsKey);
@@ -38,6 +47,7 @@ class AlertsController {
       _alertsNotifier.value = PriceAlert.decodeList(json);
     }
     _recalculateBadge();
+    _rebuildCountdowns();
   }
 
   Future<PriceAlert> createAlert({
@@ -54,6 +64,7 @@ class AlertsController {
     final alerts = [..._alertsNotifier.value, alert];
     _alertsNotifier.value = alerts;
     await _persist(alerts);
+    _rebuildCountdowns();
     return alert;
   }
 
@@ -66,6 +77,7 @@ class AlertsController {
     }).toList();
     _alertsNotifier.value = alerts;
     await _persist(alerts);
+    _rebuildCountdowns();
   }
 
   Future<void> toggleAlert(String id, bool enabled) async {
@@ -77,26 +89,50 @@ class AlertsController {
     }).toList();
     _alertsNotifier.value = alerts;
     await _persist(alerts);
+    _rebuildCountdowns();
+  }
+
+  Future<void> setCountdown(String id, Duration duration) async {
+    final alerts = _alertsNotifier.value.map((alert) {
+      if (alert.id == id) {
+        return alert.copyWith(expiresAt: DateTime.now().add(duration));
+      }
+      return alert;
+    }).toList();
+    _alertsNotifier.value = alerts;
+    await _persist(alerts);
+    _rebuildCountdowns();
   }
 
   Future<void> deleteAlert(String id) async {
     final alerts = _alertsNotifier.value.where((element) => element.id != id).toList();
     _alertsNotifier.value = alerts;
     await _persist(alerts);
+    _rebuildCountdowns();
   }
 
   Future<void> clearBadge() async {
     _badgeNotifier.value = 0;
+    _badgeBucketsNotifier.value = const <String, int>{};
   }
 
   void _startTicker() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 45), (_) async {
+    _tickCounter = 0;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       await _tick();
     });
   }
 
   Future<void> _tick() async {
+    _tickCounter++;
+    if (_tickCounter % 45 == 0) {
+      await _performPriceCheck();
+    }
+    _updateCountdowns();
+  }
+
+  Future<void> _performPriceCheck() async {
     final alerts = [..._alertsNotifier.value];
     bool mutated = false;
     for (var i = 0; i < alerts.length; i++) {
@@ -125,12 +161,66 @@ class AlertsController {
     final triggered = _alertsNotifier.value
         .where((alert) => alert.triggeredAt != null && alert.enabled)
         .length;
-    _badgeNotifier.value = triggered;
+    final countdownExpired = _countdownNotifier.value.values
+        .where((duration) => duration <= Duration.zero)
+        .length;
+    final totals = <String, int>{
+      if (triggered > 0) 'price': triggered,
+      if (countdownExpired > 0) 'countdown': countdownExpired,
+    };
+    _badgeBucketsNotifier.value = totals;
+    _badgeNotifier.value = totals.values.fold(0, (prev, value) => prev + value);
+  }
+
+  void _rebuildCountdowns() {
+    final now = DateTime.now();
+    final durations = <String, Duration>{};
+    for (final alert in _alertsNotifier.value) {
+      if (alert.expiresAt != null && alert.enabled) {
+        durations[alert.id] = alert.expiresAt!.difference(now);
+      }
+    }
+    _countdownNotifier.value = durations;
+    _recalculateBadge();
+  }
+
+  void _updateCountdowns() {
+    if (_countdownNotifier.value.isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    final updated = <String, Duration>{};
+    bool changed = false;
+    for (final entry in _countdownNotifier.value.entries) {
+      PriceAlert? alert;
+      try {
+        alert =
+            _alertsNotifier.value.firstWhere((element) => element.id == entry.key);
+      } catch (_) {
+        continue;
+      }
+      final expiresAt = alert.expiresAt;
+      if (expiresAt == null) {
+        continue;
+      }
+      final nextDuration = expiresAt.difference(now);
+      updated[entry.key] = nextDuration;
+      if (_countdownNotifier.value[entry.key]?.inSeconds !=
+          nextDuration.inSeconds) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      _countdownNotifier.value = updated;
+      _recalculateBadge();
+    }
   }
 
   void dispose() {
     _timer?.cancel();
     _alertsNotifier.dispose();
     _badgeNotifier.dispose();
+    _countdownNotifier.dispose();
+    _badgeBucketsNotifier.dispose();
   }
 }
