@@ -7,6 +7,7 @@ import '../core/utils/app_localizations.dart';
 import '../data/models/item.dart';
 import '../widgets/image_overlay_flip.dart';
 import '../widgets/price_badge.dart';
+import '../widgets/three_d_viewer.dart';
 
 class ItemCard3D extends StatelessWidget {
   const ItemCard3D({
@@ -52,14 +53,16 @@ class ItemCard3D extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
-                child: Image.network(
-                  item.images.first,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
-              ),
+              child: item.model3d != null
+                  ? ThreeDViewer(modelUrl: item.model3d!)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
+                      child: Image.network(
+                        item.images.first,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
+                    ),
             ),
             const SizedBox(height: 12),
             Text(

@@ -10,21 +10,17 @@ import '../../data/models/item.dart';
 import '../../widgets/item_card_3d.dart';
 import '../../widgets/price_badge.dart';
 import '../../widgets/three_d_viewer.dart';
-import '../cart/cart_controller.dart';
-import '../cart/widgets/cart_icon_badge.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     required this.itemsController,
-    required this.cartController,
     required this.searchKey,
     required this.heroKey,
     required this.firstCardKey,
   });
 
   final ItemsController itemsController;
-  final CartController cartController;
   final GlobalKey searchKey;
   final GlobalKey heroKey;
   final GlobalKey firstCardKey;
@@ -71,10 +67,6 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(IconlyBold.heart),
             onPressed: () => Navigator.of(context).pushNamed('/favorites'),
-          ),
-          CartIconBadge(
-            cartController: widget.cartController,
-            onPressed: () => Navigator.of(context).pushNamed('/cart'),
           ),
         ],
       ),

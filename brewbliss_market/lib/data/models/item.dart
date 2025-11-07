@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'variant.dart';
-
 class Item {
   const Item({
     required this.id,
@@ -17,15 +15,6 @@ class Item {
     required this.allowOffers,
     this.ownerId,
     required this.createdAt,
-    this.tags = const <String>[],
-    this.ratingAvg = 0,
-    this.ratingCount = 0,
-    this.priceHistory = const <double>[],
-    this.variants,
-    this.variantSelectedId,
-    this.draft = false,
-    this.tagsSuggested = const <String>[],
-    this.bundleId,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -43,21 +32,6 @@ class Item {
       allowOffers: json['allowOffers'] as bool,
       ownerId: json['ownerId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
-      tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? const <String>[],
-      ratingAvg: (json['ratingAvg'] as num?)?.toDouble() ?? 0,
-      ratingCount: json['ratingCount'] as int? ?? 0,
-      priceHistory:
-          (json['priceHistory'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ??
-              const <double>[],
-      variants: (json['variants'] as List<dynamic>?)
-          ?.map((variant) => Variant.fromJson(variant as Map<String, dynamic>))
-          .toList(),
-      variantSelectedId: json['variantSelectedId'] as String?,
-      draft: json['draft'] as bool? ?? false,
-      tagsSuggested:
-          (json['tagsSuggested'] as List<dynamic>?)?.map((e) => '$e').toList() ??
-              const <String>[],
-      bundleId: json['bundleId'] as String?,
     );
   }
 
@@ -74,15 +48,6 @@ class Item {
   final bool allowOffers;
   final String? ownerId;
   final DateTime createdAt;
-  final List<String> tags;
-  final double ratingAvg;
-  final int ratingCount;
-  final List<double> priceHistory;
-  final List<Variant>? variants;
-  final String? variantSelectedId;
-  final bool draft;
-  final List<String> tagsSuggested;
-  final String? bundleId;
 
   Map<String, dynamic> toJson() {
     return {
@@ -99,15 +64,6 @@ class Item {
       'allowOffers': allowOffers,
       'ownerId': ownerId,
       'createdAt': createdAt.toIso8601String(),
-      'tags': tags,
-      'ratingAvg': ratingAvg,
-      'ratingCount': ratingCount,
-      'priceHistory': priceHistory,
-      'variants': variants?.map((variant) => variant.toJson()).toList(),
-      'variantSelectedId': variantSelectedId,
-      'draft': draft,
-      'tagsSuggested': tagsSuggested,
-      'bundleId': bundleId,
     };
   }
 
@@ -124,15 +80,6 @@ class Item {
     bool? allowOffers,
     String? ownerId,
     DateTime? createdAt,
-    List<String>? tags,
-    double? ratingAvg,
-    int? ratingCount,
-    List<double>? priceHistory,
-    List<Variant>? variants,
-    String? variantSelectedId,
-    bool? draft,
-    List<String>? tagsSuggested,
-    String? bundleId,
   }) {
     return Item(
       id: id,
@@ -148,15 +95,6 @@ class Item {
       allowOffers: allowOffers ?? this.allowOffers,
       ownerId: ownerId ?? this.ownerId,
       createdAt: createdAt ?? this.createdAt,
-      tags: tags ?? this.tags,
-      ratingAvg: ratingAvg ?? this.ratingAvg,
-      ratingCount: ratingCount ?? this.ratingCount,
-      priceHistory: priceHistory ?? this.priceHistory,
-      variants: variants ?? this.variants,
-      variantSelectedId: variantSelectedId ?? this.variantSelectedId,
-      draft: draft ?? this.draft,
-      tagsSuggested: tagsSuggested ?? this.tagsSuggested,
-      bundleId: bundleId ?? this.bundleId,
     );
   }
 

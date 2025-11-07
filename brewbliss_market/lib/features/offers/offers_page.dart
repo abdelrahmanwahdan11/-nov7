@@ -29,6 +29,11 @@ class OffersPage extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final offer = offers[index];
+              final item = itemsController.getById(offer.itemId);
+              final created = offer.createdAt.toLocal();
+              final timestamp =
+                  '${created.year.toString().padLeft(4, '0')}-${created.month.toString().padLeft(2, '0')}-${created.day.toString().padLeft(2, '0')} '
+                  '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
               return Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -42,13 +47,24 @@ class OffersPage extends StatelessWidget {
                       children: [
                         const Icon(IconlyBold.ticket_star),
                         const SizedBox(width: 12),
-                        Text(offer.buyer),
-                        const Spacer(),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (item != null)
+                                Text(
+                                  item.name,
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              Text(offer.buyer, style: Theme.of(context).textTheme.labelMedium),
+                            ],
+                          ),
+                        ),
                         Text('\$${offer.amount.toStringAsFixed(2)}'),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(offer.createdAt.toLocal().toString()),
+                    Text(timestamp, style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 8),
                     Row(
                       children: [

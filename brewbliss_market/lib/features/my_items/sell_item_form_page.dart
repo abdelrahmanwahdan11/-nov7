@@ -3,8 +3,6 @@ import '../../controllers/items_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
-import '../../data/models/variant.dart';
-import '../common/variant_matrix_builder.dart';
 
 class SellItemFormPage extends StatefulWidget {
   const SellItemFormPage({super.key, required this.itemsController});
@@ -25,7 +23,6 @@ class _SellItemFormPageState extends State<SellItemFormPage> {
   final _imagesController = TextEditingController();
   final _modelController = TextEditingController();
   bool _allowOffers = true;
-  List<Variant> _variants = <Variant>[];
 
   @override
   void dispose() {
@@ -70,8 +67,6 @@ class _SellItemFormPageState extends State<SellItemFormPage> {
       allowOffers: _allowOffers,
       ownerId: 'self',
       createdAt: DateTime.now(),
-      variants: _variants.isEmpty ? null : _variants,
-      variantSelectedId: _variants.isEmpty ? null : _variants.first.id,
     );
     await widget.itemsController.addOrUpdateItem(item);
     if (mounted) {
@@ -181,19 +176,6 @@ class _SellItemFormPageState extends State<SellItemFormPage> {
                     borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                loc.translate('variantMatrix'),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              VariantMatrixBuilder(
-                onGenerated: (variants) {
-                  setState(() {
-                    _variants = variants;
-                  });
-                },
               ),
               const SizedBox(height: 16),
               ElevatedButton(

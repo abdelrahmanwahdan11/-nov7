@@ -1,60 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 
-import '../../controllers/alerts_controller.dart';
-import '../../controllers/app_controller.dart';
 import '../../controllers/items_controller.dart';
-import '../../controllers/negotiation_controller.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/app_localizations.dart';
 import '../../data/models/item.dart';
-import '../../data/models/price_alert.dart';
-import '../../data/models/bundle.dart';
-import '../../data/models/undo_entry.dart';
-import '../../features/cart/cart_controller.dart';
-import '../common/bundle_card.dart';
-import '../common/countdown_badge.dart';
-import '../common/snapshot_export.dart';
-import '../common/undo_bar.dart';
 import '../../widgets/image_overlay_flip.dart';
 import '../../widgets/price_badge.dart';
 import '../../widgets/three_d_viewer.dart';
-import 'widgets/negotiate_sheet.dart';
-import 'widgets/variant_selector.dart';
-import 'widgets/zoom_lens.dart';
 
 class ItemDetailPage extends StatefulWidget {
-  const ItemDetailPage({
-    super.key,
-    required this.itemId,
-    required this.itemsController,
-    required this.cartController,
-    required this.negotiationController,
-    required this.appController,
-    required this.alertsController,
-  });
+  const ItemDetailPage({super.key, required this.itemId, required this.itemsController});
 
   final String itemId;
   final ItemsController itemsController;
-  final CartController cartController;
-  final NegotiationController negotiationController;
-  final AppController appController;
-  final AlertsController alertsController;
 
   @override
   State<ItemDetailPage> createState() => _ItemDetailPageState();
 }
 
 class _ItemDetailPageState extends State<ItemDetailPage> {
-  late final GlobalKey _snapshotKey;
-
-  @override
-  void initState() {
-    super.initState();
-    _snapshotKey = GlobalKey();
-    widget.itemsController.trackView(widget.itemId);
-  }
-
   Item? get item => widget.itemsController.getById(widget.itemId);
 
   @override
@@ -67,34 +32,22 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         body: Center(child: Text(loc.translate('emptyState'))),
       );
     }
-    final effectivePrice = widget.itemsController.priceFor(currentItem.id) ?? currentItem.price;
-    final selectedVariantId = widget.itemsController.selectedVariantId(currentItem.id);
     return Scaffold(
       appBar: AppBar(
         title: Text(currentItem.name),
-        actions: [
-          SnapshotButton(
-            boundaryKey: _snapshotKey,
-            itemsController: widget.itemsController,
-            appController: widget.appController,
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          RepaintBoundary(
-            key: _snapshotKey,
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: GestureDetector(
-                onTap: () => _openOverlay(currentItem),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
-                  child: currentItem.model3d != null
-                      ? ThreeDViewer(modelUrl: currentItem.model3d!)
-                      : ZoomLens(imageUrl: currentItem.images.first),
-                ),
+          AspectRatio(
+            aspectRatio: 1,
+            child: GestureDetector(
+              onTap: () => _openOverlay(currentItem),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(DesignTokens.radiusLg),
+                child: currentItem.model3d != null
+                    ? ThreeDViewer(modelUrl: currentItem.model3d!)
+                    : Image.network(currentItem.images.first, fit: BoxFit.cover),
               ),
             ),
           ),
@@ -112,49 +65,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              if (effectivePrice != null)
-                PriceBadge(label: '\$${effectivePrice.toStringAsFixed(2)}'),
+              if (currentItem.price != null)
+                PriceBadge(label: '\$${currentItem.price!.toStringAsFixed(2)}'),
             ],
-          ),
-          const SizedBox(height: 12),
-          _PriceAlertSection(
-            itemId: currentItem.id,
-            alertsController: widget.alertsController,
-            onCreate: () => _createPriceAlert(context, currentItem),
-          ),
-          const SizedBox(height: 16),
-          ValueListenableBuilder<List<Bundle>>( 
-            valueListenable: widget.itemsController.bundlesListenable,
-            builder: (context, bundles, _) {
-              final bundle = _bundleForItem(currentItem, bundles);
-              if (bundle == null) {
-                return const SizedBox.shrink();
-              }
-              final items = widget.itemsController.itemsForBundle(bundle.id);
-              return BundleCard(
-                bundle: bundle,
-                items: items,
-                onAddToCart: () async {
-                  for (final entry in items) {
-                    await widget.cartController.add(entry.id, qty: 1);
-                  }
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(loc.translate('addToCart'))),
-                    );
-                  }
-                },
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          VariantSelector(
-            item: currentItem,
-            selectedId: selectedVariantId,
-            onChanged: (id) async {
-              await widget.itemsController.setVariantSelection(currentItem.id, id);
-              if (mounted) setState(() {});
-            },
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -188,21 +101,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   );
                 },
               ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  await widget.cartController.add(currentItem.id,
-                      variantId: widget.itemsController.selectedVariantId(currentItem.id) ??
-                          currentItem.variants?.first.id,
-                      qty: 1);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(loc.translate('addToCart'))),
-                    );
-                  }
-                },
-                icon: const Icon(IconlyLight.bag_2),
-                label: Text(loc.translate('addToCart')),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -219,107 +117,13 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           _AttributesTable(item: currentItem),
           if (currentItem.allowOffers) ...[
             const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => _openNegotiation(context, currentItem),
-              child: Text(loc.translate('negotiate')),
+            ElevatedButton(
+              onPressed: () => _makeOffer(context, currentItem),
+              child: Text(loc.translate('makeOffer')),
             ),
           ],
-          const SizedBox(height: 24),
-          ValueListenableBuilder<List<UndoEntry>>(
-            valueListenable: widget.itemsController.undoListenable,
-            builder: (context, entries, _) {
-              if (entries.isEmpty) {
-                return const SizedBox.shrink();
-              }
-              final latest = entries.first;
-              return UndoBar(
-                message: loc.translate('undo'),
-                onUndo: () async {
-                  final applied = await widget.itemsController.applyUndo(latest);
-                  if (applied && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(loc.translate('undo'))),
-                    );
-                  }
-                },
-              );
-            },
-          ),
         ],
       ),
-    );
-  }
-
-  Bundle? _bundleForItem(Item item, List<Bundle> bundles) {
-    if (item.bundleId != null) {
-      try {
-        return bundles.firstWhere((bundle) => bundle.id == item.bundleId);
-      } catch (_) {
-        // fallthrough
-      }
-    }
-    for (final bundle in bundles) {
-      if (bundle.itemIds.contains(item.id)) {
-        return bundle;
-      }
-    }
-    return null;
-  }
-
-  Future<void> _createPriceAlert(BuildContext context, Item item) async {
-    final loc = AppLocalizations.of(context);
-    final controller = TextEditingController(
-      text: item.price?.toStringAsFixed(2) ?? '0',
-    );
-    final minutesController = TextEditingController(text: '30');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(loc.translate('priceAlert')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: loc.translate('targetPrice')),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: minutesController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Countdown (minutes)'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(loc.translate('cancel')),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(loc.translate('save')),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true) return;
-    final target = double.tryParse(controller.text.trim());
-    if (target == null) return;
-    final alert = await widget.alertsController.createAlert(
-      itemId: item.id,
-      target: target,
-    );
-    final minutes = int.tryParse(minutesController.text.trim()) ?? 30;
-    final clampedMinutes = minutes.clamp(1, 240).toInt();
-    await widget.alertsController
-        .setCountdown(alert.id, Duration(minutes: clampedMinutes));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(loc.translate('priceAlert'))),
     );
   }
 
@@ -338,23 +142,42 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
   }
 
-  Future<void> _openNegotiation(BuildContext context, Item item) async {
-    await showModalBottomSheet<void>(
+  Future<void> _makeOffer(BuildContext context, Item item) async {
+    final controller = TextEditingController();
+    final loc = AppLocalizations.of(context);
+    final amount = await showDialog<double>(
       context: context,
-      isScrollControlled: true,
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+        return AlertDialog(
+          title: Text(loc.translate('makeOffer')),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(prefixText: '\$'),
           ),
-          child: NegotiateSheet(
-            itemId: item.id,
-            negotiationController: widget.negotiationController,
-            itemsController: widget.itemsController,
-          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                final value = double.tryParse(controller.text);
+                if (value != null) {
+                  Navigator.of(context).pop(value);
+                }
+              },
+              child: const Text('OK'),
+            ),
+          ],
         );
       },
     );
+    if (amount != null) {
+      await widget.itemsController.makeOffer(item.id, amount, buyer: 'Guest');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${loc.translate('offers')}: ${amount.toStringAsFixed(2)}')),
+        );
+      }
+    }
   }
 
   void _showAiInfo(BuildContext context) {
@@ -375,65 +198,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               const Text('Hand-crafted notes brewing...'),
             ],
           ),
-        );
-      },
-    );
-  }
-}
-
-class _PriceAlertSection extends StatelessWidget {
-  const _PriceAlertSection({
-    required this.itemId,
-    required this.alertsController,
-    required this.onCreate,
-  });
-
-  final String itemId;
-  final AlertsController alertsController;
-  final VoidCallback onCreate;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<PriceAlert>>(
-      valueListenable: alertsController.alertsListenable,
-      builder: (context, alerts, _) {
-        final relevant = alerts.where((alert) => alert.itemId == itemId).toList();
-        if (relevant.isEmpty) {
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(IconlyLight.notification),
-              label: Text(AppLocalizations.of(context).translate('priceAlert')),
-            ),
-          );
-        }
-        return ValueListenableBuilder<Map<String, Duration>>(
-          valueListenable: alertsController.countdownsListenable,
-          builder: (context, countdowns, __) {
-            final active = relevant
-                .map((alert) => countdowns[alert.id])
-                .whereType<Duration>()
-                .toList();
-            final duration = active.isEmpty
-                ? null
-                : active.reduce((a, b) => a < b ? a : b);
-            return Row(
-              children: [
-                if (duration != null)
-                  CountdownBadge(duration: duration)
-                else
-                  const SizedBox.shrink(),
-                const SizedBox(width: 12),
-                Text(AppLocalizations.of(context).translate('priceAlert')),
-                const Spacer(),
-                TextButton(
-                  onPressed: onCreate,
-                  child: Text(MaterialLocalizations.of(context).editButtonLabel),
-                ),
-              ],
-            );
-          },
         );
       },
     );

@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../core/theme/design_tokens.dart';
-import '../core/utils/app_localizations.dart';
 import '../data/models/item.dart';
-import 'price_badge.dart';
+import '../core/utils/app_localizations.dart';
 import 'three_d_viewer.dart';
 
 class ImageOverlayFlip extends StatefulWidget {
@@ -64,7 +63,7 @@ class _ImageOverlayFlipState extends State<ImageOverlayFlip> {
                 },
                 child: _showBack
                     ? _BackFace(item: widget.item, loc: loc)
-                    : _FrontFace(item: widget.item, loc: loc),
+                    : _FrontFace(item: widget.item),
               ),
             ),
           ),
@@ -83,11 +82,9 @@ class _ImageOverlayFlipState extends State<ImageOverlayFlip> {
 }
 
 class _FrontFace extends StatelessWidget {
-  const _FrontFace({required this.item, required this.loc})
-      : super(key: const ValueKey('front'));
+  const _FrontFace({required this.item}) : super(key: const ValueKey('front'));
 
   final Item item;
-  final AppLocalizations loc;
 
   @override
   Widget build(BuildContext context) {
@@ -101,31 +98,26 @@ class _FrontFace extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: item.model3d != null
-                  ? ThreeDViewer(modelUrl: item.model3d!)
-                  : Image.network(
-                      item.images.first,
-                      fit: BoxFit.cover,
-                    ),
+          if (item.model3d != null)
+            SizedBox.square(
+              dimension: MediaQuery.of(context).size.width * 0.6,
+              child: ThreeDViewer(modelUrl: item.model3d!),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(DesignTokens.radiusMd),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: Image.network(
+                  item.images.first,
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
-          ),
           const SizedBox(height: 16),
           Text(
             item.name,
             style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.center,
-            child: PriceBadge(
-              label: item.price != null
-                  ? '\\$${item.price!.toStringAsFixed(2)}'
-                  : loc.translate('offersBadge'),
-            ),
           ),
         ],
       ),
